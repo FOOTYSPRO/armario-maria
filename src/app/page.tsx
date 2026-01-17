@@ -118,12 +118,9 @@ function ArmarioContent() {
   const [activeTab, setActiveTab] = useState<'outfit' | 'armario'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // ESTADO DEL CLIMA
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
   useEffect(() => {
-    // 1. Cargar Ropa
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => {
@@ -139,25 +136,18 @@ function ArmarioContent() {
         setLoading(false);
     });
 
-    // 2. Obtener Ubicación y Clima
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
             try {
-                // Usamos Open-Meteo (API Gratuita sin key)
                 const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
                 const data = await res.json();
-                
-                // Intentamos obtener nombre ciudad (opcional, api simple reverse geo)
-                // Para simplificar, pondremos "Tu Ubicación" o usaremos coord si no tenemos servicio de mapas
                 setWeather({
                     temp: Math.round(data.current_weather.temperature),
-                    city: "Tu Ubicación", // Podríamos usar otra API para sacar el nombre exacto
+                    city: "Tu Ubicación",
                     code: data.current_weather.weathercode
                 });
-            } catch (e) {
-                console.error("Error clima", e);
-            }
+            } catch (e) { console.error("Error clima", e); }
         });
     }
 
@@ -216,17 +206,46 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
         }
 
         setTimeout(() => {
-            const selectedTop = tops[Math.floor(Math.random() * tops.length)];
+            // --- CEREBRO TÉRMICO Y DE ESTILO 🧠 ---
+            let availableTops = tops;
+            let tempWarning = '';
+
+            // 1. FILTRO DE TEMPERATURA
+            if (weather) {
+                if (weather.temp < 15) {
+                    // FRÍO: Prioridad a Sudaderas, Chaquetas, Abrigos
+                    const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo'].includes(t.subCategory));
+                    if (winterTops.length > 0) {
+                        availableTops = winterTops;
+                        tempWarning = '❄️ Modo Invierno activado.';
+                    } else {
+                        tempWarning = '❄️ Hace frío, pero no tienes abrigos subidos.';
+                    }
+                } else if (weather.temp > 25) {
+                    // CALOR: Prioridad a Camisetas, Tops
+                    const summerTops = tops.filter(t => ['Camiseta', 'Top', 'Camisa'].includes(t.subCategory));
+                    if (summerTops.length > 0) {
+                        availableTops = summerTops;
+                        tempWarning = '☀️ Modo Verano activado.';
+                    }
+                }
+            }
+
+            // 2. SELECCIÓN DE TOP
+            const selectedTop = availableTops[Math.floor(Math.random() * availableTops.length)];
             const topColorInfo = COLOR_REFERENCES.find(c => c.value === selectedTop.colorName);
             const topGroup = topColorInfo?.group || 'neutral';
 
+            // 3. FILTRO DE BOTTOMS COMPATIBLES
             let compatibleBottoms = bottoms.filter(b => {
+                // A. Regla de Estilo
                 if (selectedTop.estilo === 'sport' && b.estilo === 'elegant') return false;
                 if (selectedTop.estilo === 'elegant' && b.estilo === 'sport') return false;
                 return true; 
             });
             if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
 
+            // B. Regla de Color (Si top no es neutro, buscar bottoms neutros)
             let bestBottoms = compatibleBottoms;
             if (topGroup !== 'neutral') {
                 const neutralBottoms = compatibleBottoms.filter(b => {
@@ -241,13 +260,12 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
 
             setOutfit({ top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
             
-            // Lógica de mensaje con temperatura
-            if (weather && weather.temp < 15 && selectedTop.subCategory !== 'Abrigo' && selectedTop.subCategory !== 'Chaqueta') {
-                setMessage(`Hace frío (${weather.temp}°). ¡Añade una capa extra! ❄️`);
-            } else if (weather && weather.temp > 25) {
-                setMessage(`Calor (${weather.temp}°). Look fresco ideal. ☀️`);
+            // MENSAJE FINAL
+            if (tempWarning) {
+                setMessage(tempWarning);
             } else {
-                setMessage(`Combinación ${selectedTop.estilo} perfecta.`);
+                if (selectedTop.estilo === selectedBottom.estilo) setMessage(`Un look ${selectedTop.estilo} impecable.`);
+                else setMessage(`Mix & Match: ${selectedTop.estilo} con toque casual.`);
             }
 
             setIsAnimating(false);
@@ -261,12 +279,12 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
                 {weather ? (
                     <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', opacity: 0.8 }}>
-                            {weather.temp > 20 ? <CloudSun size={20} /> : <Thermometer size={20} />}
+                            {weather.temp > 20 ? <CloudSun size={24} /> : <Thermometer size={24} />}
                             <span style={{ fontSize: '0.9rem', fontWeight: '600', textTransform:'uppercase' }}>{weather.city}</span>
                         </div>
                         <div style={{ fontSize: '4rem', fontWeight: '900', lineHeight: '0.9', marginBottom: '10px' }}>{weather.temp}°</div>
                         <p style={{ fontSize: '1.1rem', fontWeight: '500', color: '#ccc' }}>
-                            {weather.temp < 10 ? 'Brrr, hace frío' : weather.temp < 20 ? 'Fresco pero agradable' : '¡Día de sol!'}
+                            {weather.temp < 15 ? '¡Hora de abrigarse!' : weather.temp < 25 ? 'Temperatura agradable' : '¡Qué calor!'}
                         </p>
                     </>
                 ) : (
@@ -279,7 +297,7 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
 
             {outfit && (
                 <div className="fade-in" style={{ marginBottom: '30px' }}>
-                    <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>✨ {message}</div>
+                    <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
                             <Image src={outfit.top!.image} alt="top" fill style={{ objectFit: 'contain', padding:'10px' }} />
@@ -334,7 +352,7 @@ function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean
             <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Tus prendas ({clothes.length})</h2>
                 <button onClick={() => setIsModalOpen(true)} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
-                    <Camera size={22} />
+                    <Camera size={24} />
                 </button>
             </div>
 
@@ -456,8 +474,8 @@ function UploadModal({ onClose, onSave }: any) {
                 {!file ? (
                     <div style={{marginBottom:'20px'}}>
                         <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
-                            <button onClick={()=>setMode('upload')} style={{flex:1, padding:'10px', borderRadius:'10px', border: mode==='upload'?'2px solid #111':'1px solid #eee', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', cursor:'pointer'}}><UploadCloud size={16}/> Subir Foto</button>
-                            <button onClick={()=>setMode('url')} style={{flex:1, padding:'10px', borderRadius:'10px', border: mode==='url'?'2px solid #111':'1px solid #eee', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', cursor:'pointer'}}><LinkIcon size={16}/> Enlace Web</button>
+                            <button onClick={()=>setMode('upload')} style={{flex:1, padding:'10px', borderRadius:'10px', border: mode==='upload'?'2px solid #111':'1px solid #eee', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', cursor:'pointer'}}><UploadCloud size={20}/> Subir Foto</button>
+                            <button onClick={()=>setMode('url')} style={{flex:1, padding:'10px', borderRadius:'10px', border: mode==='url'?'2px solid #111':'1px solid #eee', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', cursor:'pointer'}}><LinkIcon size={20}/> Enlace Web</button>
                         </div>
                         {mode === 'upload' ? (
                             <label style={{display:'block', padding:'40px', border:'2px dashed #ccc', borderRadius:'12px', textAlign:'center', cursor:'pointer'}}>
@@ -524,8 +542,8 @@ function UploadModal({ onClose, onSave }: any) {
     );
 }
 
-function Badge({text, color='#eef'}:any) { return <span style={{fontSize:'0.7rem', background:color, padding:'2px 6px', borderRadius:'4px', fontWeight:'600', color:'#444'}}>{text}</span> }
+function Badge({text, color='#eef'}:any) { return <span style={{fontSize:'0.85rem', background:color, padding:'4px 8px', borderRadius:'6px', fontWeight:'600', color:'#444'}}>{text}</span> }
 function SectionLabel({icon, label}:any) { return <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', fontWeight:'700', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>{icon} {label}</div> }
-function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'8px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer'}}>{label}</button> }
-function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 12px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
+function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer'}}>{label}</button> }
+function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 14px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
 function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer' }}>{icon} {label}</button>; }
