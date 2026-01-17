@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -47,10 +47,12 @@ interface Prenda {
 }
 
 interface Outfit {
+    id?: string; // ID opcional si viene de la BD
     top: Prenda | null;
     bottom: Prenda | null;
     shoes: Prenda | null;
     matchScore: number;
+    date?: any; // Fecha de creación
 }
 
 const SUB_CATEGORIES = {
@@ -115,7 +117,7 @@ export default function Page() {
 }
 
 function ArmarioContent() {
-  const [activeTab, setActiveTab] = useState<'outfit' | 'armario'>('outfit');
+  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
@@ -150,9 +152,16 @@ function ArmarioContent() {
             } catch (e) { console.error("Error clima", e); }
         });
     }
-
     return () => unsubscribe();
   }, []);
+
+  const renderView = () => {
+    switch(activeTab) {
+        case 'outfit': return <OutfitView clothes={clothes} weather={weather} />;
+        case 'armario': return <ArmarioView clothes={clothes} loading={loading} />;
+        case 'favoritos': return <FavoritesView />;
+    }
+  };
   
   return (
     <div style={{ fontFamily: 'var(--font-inter), sans-serif', background: '#ffffff', minHeight: '100vh', color: '#111111' }}>
@@ -172,16 +181,18 @@ function ArmarioContent() {
                 Hola, María <span style={{fontSize:'2rem'}}>✨</span>
             </h1>
             <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
-                {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 'Tu colección personal'}
+                {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : activeTab === 'favoritos' ? 'Tus looks guardados' : 'Tu colección personal'}
             </p>
         </header>
 
         <div style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px' }}>
-            <TabButton label="Generar Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} />
-            <TabButton label="Mi Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
+            <TabButton label="Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} />
+            <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
+            <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
         </div>
 
-        {activeTab === 'outfit' ? <OutfitView clothes={clothes} weather={weather} /> : <ArmarioView clothes={clothes} loading={loading} />}
+        {renderView()}
+
       </div>
     </div>
   );
@@ -190,6 +201,7 @@ function ArmarioContent() {
 function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
 
     const generateSmartOutfit = () => {
@@ -206,46 +218,31 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
         }
 
         setTimeout(() => {
-            // --- CEREBRO TÉRMICO Y DE ESTILO 🧠 ---
             let availableTops = tops;
             let tempWarning = '';
 
             // 1. FILTRO DE TEMPERATURA
             if (weather) {
                 if (weather.temp < 15) {
-                    // FRÍO: Prioridad a Sudaderas, Chaquetas, Abrigos
                     const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo'].includes(t.subCategory));
-                    if (winterTops.length > 0) {
-                        availableTops = winterTops;
-                        tempWarning = '❄️ Modo Invierno activado.';
-                    } else {
-                        tempWarning = '❄️ Hace frío, pero no tienes abrigos subidos.';
-                    }
+                    if (winterTops.length > 0) { availableTops = winterTops; tempWarning = '❄️ Modo Invierno.'; }
                 } else if (weather.temp > 25) {
-                    // CALOR: Prioridad a Camisetas, Tops
                     const summerTops = tops.filter(t => ['Camiseta', 'Top', 'Camisa'].includes(t.subCategory));
-                    if (summerTops.length > 0) {
-                        availableTops = summerTops;
-                        tempWarning = '☀️ Modo Verano activado.';
-                    }
+                    if (summerTops.length > 0) { availableTops = summerTops; tempWarning = '☀️ Modo Verano.'; }
                 }
             }
 
-            // 2. SELECCIÓN DE TOP
             const selectedTop = availableTops[Math.floor(Math.random() * availableTops.length)];
             const topColorInfo = COLOR_REFERENCES.find(c => c.value === selectedTop.colorName);
             const topGroup = topColorInfo?.group || 'neutral';
 
-            // 3. FILTRO DE BOTTOMS COMPATIBLES
             let compatibleBottoms = bottoms.filter(b => {
-                // A. Regla de Estilo
                 if (selectedTop.estilo === 'sport' && b.estilo === 'elegant') return false;
                 if (selectedTop.estilo === 'elegant' && b.estilo === 'sport') return false;
                 return true; 
             });
             if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
 
-            // B. Regla de Color (Si top no es neutro, buscar bottoms neutros)
             let bestBottoms = compatibleBottoms;
             if (topGroup !== 'neutral') {
                 const neutralBottoms = compatibleBottoms.filter(b => {
@@ -260,17 +257,30 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
 
             setOutfit({ top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
             
-            // MENSAJE FINAL
-            if (tempWarning) {
-                setMessage(tempWarning);
-            } else {
+            if (tempWarning) setMessage(tempWarning);
+            else {
                 if (selectedTop.estilo === selectedBottom.estilo) setMessage(`Un look ${selectedTop.estilo} impecable.`);
                 else setMessage(`Mix & Match: ${selectedTop.estilo} con toque casual.`);
             }
-
             setIsAnimating(false);
         }, 600);
     };
+
+    const saveToFavorites = async () => {
+        if (!outfit) return;
+        setIsSaving(true);
+        try {
+            await addDoc(collection(db, 'favorites'), {
+                ...outfit,
+                createdAt: serverTimestamp()
+            });
+            alert("¡Guardado en Favoritos! ❤️");
+        } catch (e) {
+            console.error(e);
+            alert("Error al guardar");
+        }
+        setIsSaving(false);
+    }
 
     return (
         <div className="fade-in">
@@ -296,7 +306,17 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
             </div>
 
             {outfit && (
-                <div className="fade-in" style={{ marginBottom: '30px' }}>
+                <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
+                    
+                    {/* BOTÓN FAVORITO FLOTANTE */}
+                    <button 
+                        onClick={saveToFavorites}
+                        disabled={isSaving}
+                        style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}
+                    >
+                        <Heart size={24} fill={isSaving ? "none" : "#e0245e"} />
+                    </button>
+
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
@@ -330,6 +350,64 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
             </div>
         </div>
     );
+}
+
+// --- VISTA FAVORITOS (NUEVA) ---
+function FavoritesView() {
+    const [favorites, setFavorites] = useState<Outfit[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
+            setFavorites(data);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const deleteFav = async (id: string) => {
+        if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id));
+    }
+
+    if(loading) return <p>Cargando favoritos...</p>;
+
+    return (
+        <div className="fade-in">
+            {favorites.length === 0 ? (
+                 <div style={{textAlign:'center', padding:'40px 20px', color:'#999'}}>
+                    <Heart size={40} style={{marginBottom:'10px', opacity:0.3}} />
+                    <p>Todavía no has guardado ningún look.</p>
+                 </div>
+            ) : (
+                <div style={{display:'grid', gap:'20px'}}>
+                    {favorites.map(fav => (
+                        <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative'}}>
+                            <button onClick={() => deleteFav(fav.id!)} style={{position:'absolute', top:'10px', right:'10px', zIndex:5, background:'white', border:'1px solid #eee', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14} color="#999"/></button>
+                            
+                            {/* Fecha */}
+                            <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#888', marginBottom:'10px'}}>
+                                <Calendar size={12}/> <span>Look guardado</span>
+                            </div>
+
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
+                                    <Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/>
+                                </div>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
+                                    <Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/>
+                                </div>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                                    {fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
 }
 
 function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean }) {
@@ -546,4 +624,4 @@ function Badge({text, color='#eef'}:any) { return <span style={{fontSize:'0.85re
 function SectionLabel({icon, label}:any) { return <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', fontWeight:'700', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>{icon} {label}</div> }
 function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer'}}>{label}</button> }
 function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 14px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
-function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer' }}>{icon} {label}</button>; }
+function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)' }}>{icon} {label}</button>; }
