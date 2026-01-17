@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, where, getDocs } from 'firebase/firestore';
 
 // --- TIPOS ---
 type Estilo = 'sport' | 'casual' | 'elegant' | 'party';
@@ -47,12 +47,19 @@ interface Prenda {
 }
 
 interface Outfit {
-    id?: string; // ID opcional si viene de la BD
+    id?: string;
     top: Prenda | null;
     bottom: Prenda | null;
     shoes: Prenda | null;
     matchScore: number;
-    date?: any; // Fecha de creación
+    date?: any;
+}
+
+// Interfaz para el Calendario
+interface PlannedDay {
+    id: string; // ID del documento en firebase
+    date: string; // "2024-05-20"
+    outfit: Outfit;
 }
 
 const SUB_CATEGORIES = {
@@ -108,6 +115,7 @@ const findClosestColorName = (r: number, g: number, b: number) => {
     return closest;
 };
 
+// --- COMPONENTE PRINCIPAL ---
 export default function Page() {
   return (
     <Suspense fallback={<div>Cargando...</div>}>
@@ -117,7 +125,7 @@ export default function Page() {
 }
 
 function ArmarioContent() {
-  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos'>('outfit');
+  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
@@ -160,6 +168,7 @@ function ArmarioContent() {
         case 'outfit': return <OutfitView clothes={clothes} weather={weather} />;
         case 'armario': return <ArmarioView clothes={clothes} loading={loading} />;
         case 'favoritos': return <FavoritesView />;
+        case 'calendario': return <CalendarView />;
     }
   };
   
@@ -176,19 +185,22 @@ function ArmarioContent() {
         `}} />
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px 20px 100px 20px' }}>
-        <header style={{ marginBottom: '30px', paddingTop: '20px' }}>
+        <header style={{ marginBottom: '20px', paddingTop: '20px' }}>
             <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
                 Hola, María <span style={{fontSize:'2rem'}}>✨</span>
             </h1>
             <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
-                {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : activeTab === 'favoritos' ? 'Tus looks guardados' : 'Tu colección personal'}
+                {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 
+                 activeTab === 'calendario' ? 'Planificador Semanal' :
+                 activeTab === 'favoritos' ? 'Tus looks guardados' : 'Tu colección personal'}
             </p>
         </header>
 
-        <div style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px', overflowX:'auto' }}>
             <TabButton label="Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} />
             <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
             <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
+            <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} />
         </div>
 
         {renderView()}
@@ -197,6 +209,169 @@ function ArmarioContent() {
     </div>
   );
 }
+
+// --- VISTA CALENDARIO 📅 ---
+function CalendarView() {
+    const [weekStart, setWeekStart] = useState(new Date()); // Fecha de inicio de la semana visible
+    const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
+    const [selectedDateForAdd, setSelectedDateForAdd] = useState<string | null>(null);
+    const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+    const [favorites, setFavorites] = useState<Outfit[]>([]);
+
+    // Cargar Planificación
+    useEffect(() => {
+        const q = query(collection(db, 'planning'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
+            setPlannedDays(data);
+        });
+        
+        // Cargar favoritos para el selector
+        const qFav = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
+        getDocs(qFav).then(snap => {
+            const favData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
+            setFavorites(favData);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Generar los 7 días de la semana actual
+    const getDaysOfWeek = (start: Date) => {
+        const days = [];
+        // Ajustar al lunes anterior (o hoy si es lunes)
+        const day = start.getDay();
+        const diff = start.getDate() - day + (day === 0 ? -6 : 1); 
+        const monday = new Date(start.setDate(diff));
+
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            days.push(d);
+        }
+        return days;
+    };
+
+    const days = getDaysOfWeek(new Date(weekStart));
+
+    const formatDateKey = (date: Date) => {
+        return date.toISOString().split('T')[0]; // "2024-12-25"
+    };
+
+    const handleAddClick = (dateStr: string) => {
+        setSelectedDateForAdd(dateStr);
+        setIsSelectorOpen(true);
+    };
+
+    const confirmPlan = async (outfit: Outfit) => {
+        if (!selectedDateForAdd) return;
+        
+        // Borrar si ya hay algo ese día
+        const existing = plannedDays.find(p => p.date === selectedDateForAdd);
+        if (existing) await deleteDoc(doc(db, 'planning', existing.id));
+
+        await addDoc(collection(db, 'planning'), {
+            date: selectedDateForAdd,
+            outfit: outfit,
+            createdAt: serverTimestamp()
+        });
+
+        setIsSelectorOpen(false);
+        setSelectedDateForAdd(null);
+    };
+
+    const deletePlan = async (id: string) => {
+        if(confirm("¿Quitar outfit de este día?")) await deleteDoc(doc(db, 'planning', id));
+    };
+
+    const changeWeek = (offset: number) => {
+        const newDate = new Date(weekStart);
+        newDate.setDate(newDate.getDate() + (offset * 7));
+        setWeekStart(newDate);
+    };
+
+    return (
+        <div className="fade-in">
+            {/* Cabecera Semana */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronLeft size={24}/></button>
+                <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>
+                    {weekStart.toLocaleString('es-ES', { month: 'long' })} {weekStart.getFullYear()}
+                </h3>
+                <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronRight size={24}/></button>
+            </div>
+
+            {/* Lista de Días */}
+            <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
+                {days.map((day) => {
+                    const dateKey = formatDateKey(day);
+                    const plan = plannedDays.find(p => p.date === dateKey);
+                    const isToday = formatDateKey(new Date()) === dateKey;
+
+                    return (
+                        <div key={dateKey} style={{background: isToday ? '#fff' : '#f9f9f9', border: isToday ? '2px solid #111' : '1px solid #eee', borderRadius:'16px', padding:'15px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                                <div style={{display:'flex', flexDirection:'column'}}>
+                                    <span style={{fontSize:'0.8rem', color:'#666', textTransform:'uppercase', fontWeight:'600'}}>{day.toLocaleString('es-ES', { weekday: 'long' })}</span>
+                                    <span style={{fontSize:'1.2rem', fontWeight:'800'}}>{day.getDate()}</span>
+                                </div>
+                                {plan ? (
+                                    <button onClick={() => deletePlan(plan.id)} style={{background:'#ffebee', color:'red', border:'none', borderRadius:'50%', width:'30px', height:'30px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14}/></button>
+                                ) : (
+                                    <button onClick={() => handleAddClick(dateKey)} style={{background:'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}>
+                                        <Plus size={14}/> Añadir
+                                    </button>
+                                )}
+                            </div>
+
+                            {plan ? (
+                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
+                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.top!.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                                        {plan.outfit.shoes ? <Image src={plan.outfit.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'2px'}}/> : <Footprints size={16} color="#ccc"/>}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{height:'60px', border:'2px dashed #e0e0e0', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'0.8rem'}}>
+                                    Sin planificar
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Modal Selector de Favoritos */}
+            {isSelectorOpen && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
+                            <h3 style={{margin:0}}>Elige un outfit</h3>
+                            <button onClick={() => setIsSelectorOpen(false)} style={{background:'none', border:'none'}}><X/></button>
+                        </div>
+                        {favorites.length === 0 ? <p>No tienes favoritos guardados.</p> : (
+                            <div style={{display:'grid', gap:'10px'}}>
+                                {favorites.map(fav => (
+                                    <div key={fav.id} onClick={() => confirmPlan(fav)} style={{border:'1px solid #eee', borderRadius:'12px', padding:'10px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
+                                        <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain'}}/></div>
+                                        <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain'}}/></div>
+                                        <div style={{flex:1}}>
+                                            <p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>{fav.top!.estilo} / {fav.bottom!.estilo}</p>
+                                        </div>
+                                        <Check size={16} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// --- VISTAS EXISTENTES (Outfit, Armario, Favoritos) ---
 
 function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
@@ -221,7 +396,6 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
             let availableTops = tops;
             let tempWarning = '';
 
-            // 1. FILTRO DE TEMPERATURA
             if (weather) {
                 if (weather.temp < 15) {
                     const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo'].includes(t.subCategory));
@@ -270,21 +444,14 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
         if (!outfit) return;
         setIsSaving(true);
         try {
-            await addDoc(collection(db, 'favorites'), {
-                ...outfit,
-                createdAt: serverTimestamp()
-            });
+            await addDoc(collection(db, 'favorites'), { ...outfit, createdAt: serverTimestamp() });
             alert("¡Guardado en Favoritos! ❤️");
-        } catch (e) {
-            console.error(e);
-            alert("Error al guardar");
-        }
+        } catch (e) { console.error(e); alert("Error al guardar"); }
         setIsSaving(false);
     }
 
     return (
         <div className="fade-in">
-            {/* Widget Clima REAL */}
             <div style={{ background: '#111', color: 'white', padding: '30px', borderRadius: '24px', marginBottom: '30px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
                 {weather ? (
                     <>
@@ -293,9 +460,7 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
                             <span style={{ fontSize: '0.9rem', fontWeight: '600', textTransform:'uppercase' }}>{weather.city}</span>
                         </div>
                         <div style={{ fontSize: '4rem', fontWeight: '900', lineHeight: '0.9', marginBottom: '10px' }}>{weather.temp}°</div>
-                        <p style={{ fontSize: '1.1rem', fontWeight: '500', color: '#ccc' }}>
-                            {weather.temp < 15 ? '¡Hora de abrigarse!' : weather.temp < 25 ? 'Temperatura agradable' : '¡Qué calor!'}
-                        </p>
+                        <p style={{ fontSize: '1.1rem', fontWeight: '500', color: '#ccc' }}>{weather.temp < 15 ? '¡Hora de abrigarse!' : weather.temp < 25 ? 'Temperatura agradable' : '¡Qué calor!'}</p>
                     </>
                 ) : (
                     <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
@@ -307,16 +472,9 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
 
             {outfit && (
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
-                    
-                    {/* BOTÓN FAVORITO FLOTANTE */}
-                    <button 
-                        onClick={saveToFavorites}
-                        disabled={isSaving}
-                        style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}
-                    >
+                    <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}>
                         <Heart size={24} fill={isSaving ? "none" : "#e0245e"} />
                     </button>
-
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
@@ -339,10 +497,7 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
             )}
 
             <div style={{ textAlign: 'center' }}>
-                <button 
-                    onClick={generateSmartOutfit}
-                    disabled={isAnimating}
-                    style={{ width: '100%', background: isAnimating ? '#333' : 'white', color: isAnimating ? '#ccc' : '#111', border: '2px solid #111', padding: '20px', borderRadius: '20px', fontSize: '1.1rem', fontWeight: '800', cursor: isAnimating ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', transition: 'all 0.2s', transform: isAnimating ? 'scale(0.98)' : 'scale(1)' }}>
+                <button onClick={generateSmartOutfit} disabled={isAnimating} style={{ width: '100%', background: isAnimating ? '#333' : 'white', color: isAnimating ? '#ccc' : '#111', border: '2px solid #111', padding: '20px', borderRadius: '20px', fontSize: '1.1rem', fontWeight: '800', cursor: isAnimating ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', transition: 'all 0.2s', transform: isAnimating ? 'scale(0.98)' : 'scale(1)' }}>
                     {isAnimating ? <RefreshCw className="spin" size={20} /> : <Sparkles size={20} />}
                     {outfit ? '¡Otra combinación!' : 'Generar Outfit Inteligente'}
                 </button>
@@ -352,7 +507,6 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
     );
 }
 
-// --- VISTA FAVORITOS (NUEVA) ---
 function FavoritesView() {
     const [favorites, setFavorites] = useState<Outfit[]>([]);
     const [loading, setLoading] = useState(true);
@@ -385,19 +539,9 @@ function FavoritesView() {
                     {favorites.map(fav => (
                         <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative'}}>
                             <button onClick={() => deleteFav(fav.id!)} style={{position:'absolute', top:'10px', right:'10px', zIndex:5, background:'white', border:'1px solid #eee', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14} color="#999"/></button>
-                            
-                            {/* Fecha */}
-                            <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#888', marginBottom:'10px'}}>
-                                <Calendar size={12}/> <span>Look guardado</span>
-                            </div>
-
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
-                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
-                                    <Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/>
-                                </div>
-                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
-                                    <Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/>
-                                </div>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/></div>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/></div>
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
                                     {fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}
                                 </div>
@@ -460,6 +604,7 @@ function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean
     );
 }
 
+// --- MODAL SUBIDA COMPARTIDO ---
 function UploadModal({ onClose, onSave }: any) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
@@ -624,4 +769,4 @@ function Badge({text, color='#eef'}:any) { return <span style={{fontSize:'0.85re
 function SectionLabel({icon, label}:any) { return <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', fontWeight:'700', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>{icon} {label}</div> }
 function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer'}}>{label}</button> }
 function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 14px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
-function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)' }}>{icon} {label}</button>; }
+function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', minWidth: '70px' }}>{icon} {label}</button>; }
