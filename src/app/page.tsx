@@ -2,12 +2,15 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, getDocs } from 'firebase/firestore';
+
+// --- USUARIOS ---
+const USERS = ['Maria', 'Jorge'];
 
 // --- TIPOS ---
 type Estilo = 'sport' | 'casual' | 'elegant' | 'party';
@@ -37,6 +40,7 @@ const COLOR_REFERENCES = [
 
 interface Prenda { 
   id: string; 
+  owner?: string; // NUEVO: Dueño de la prenda
   name: string; 
   category: 'top' | 'bottom' | 'shoes'; 
   subCategory: string;
@@ -48,6 +52,7 @@ interface Prenda {
 
 interface Outfit {
     id?: string;
+    owner?: string;
     top: Prenda | null;
     bottom: Prenda | null;
     shoes: Prenda | null;
@@ -55,10 +60,10 @@ interface Outfit {
     date?: any;
 }
 
-// Interfaz para el Calendario
 interface PlannedDay {
-    id: string; // ID del documento en firebase
-    date: string; // "2024-05-20"
+    id: string;
+    owner?: string;
+    date: string;
     outfit: Outfit;
 }
 
@@ -125,15 +130,18 @@ export default function Page() {
 }
 
 function ArmarioContent() {
+  const [currentUser, setCurrentUser] = useState<string>('Maria'); // Estado del Usuario
   const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
+  // Cargar Ropa (Filtrada por Usuario)
   useEffect(() => {
+    // Nota: Traemos todo y filtramos en local para evitar problemas de índices en Firestore por ahora.
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => {
+        const allData = snapshot.docs.map(doc => {
             const d = doc.data();
             return { 
                 id: doc.id, ...d, 
@@ -142,10 +150,17 @@ function ArmarioContent() {
                 colorHex: d.colorHex || '#000000'
             };
         }) as Prenda[];
-        setClothes(data);
+
+        // FILTRO DE USUARIO 🕵️‍♂️
+        // Si la prenda no tiene 'owner' (ropa antigua), la mostramos a los dos.
+        // Si tiene 'owner', solo la mostramos si coincide con el currentUser.
+        const myClothes = allData.filter(item => !item.owner || item.owner === currentUser);
+        
+        setClothes(myClothes);
         setLoading(false);
     });
 
+    // Clima
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -161,14 +176,14 @@ function ArmarioContent() {
         });
     }
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]); // <-- Se re-ejecuta al cambiar de usuario
 
   const renderView = () => {
     switch(activeTab) {
-        case 'outfit': return <OutfitView clothes={clothes} weather={weather} />;
-        case 'armario': return <ArmarioView clothes={clothes} loading={loading} />;
-        case 'favoritos': return <FavoritesView />;
-        case 'calendario': return <CalendarView />;
+        case 'outfit': return <OutfitView clothes={clothes} weather={weather} currentUser={currentUser} />;
+        case 'armario': return <ArmarioView clothes={clothes} loading={loading} currentUser={currentUser} />;
+        case 'favoritos': return <FavoritesView currentUser={currentUser} />;
+        case 'calendario': return <CalendarView currentUser={currentUser} />;
     }
   };
   
@@ -185,15 +200,39 @@ function ArmarioContent() {
         `}} />
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px 20px 100px 20px' }}>
-        <header style={{ marginBottom: '20px', paddingTop: '20px' }}>
-            <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
-                Hola, María <span style={{fontSize:'2rem'}}>✨</span>
-            </h1>
-            <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
-                {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 
-                 activeTab === 'calendario' ? 'Planificador Semanal' :
-                 activeTab === 'favoritos' ? 'Tus looks guardados' : 'Tu colección personal'}
-            </p>
+        
+        {/* HEADER CON SELECTOR DE USUARIO */}
+        <header style={{ marginBottom: '20px', paddingTop: '20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+                <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
+                    Hola, {currentUser} <span style={{fontSize:'2rem'}}>✨</span>
+                </h1>
+                <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
+                    {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 
+                     activeTab === 'calendario' ? 'Tu semana' :
+                     activeTab === 'favoritos' ? 'Tus favoritos' : 'Tu colección'}
+                </p>
+            </div>
+            
+            {/* BOTÓN CAMBIO DE PERFIL */}
+            <div style={{position:'relative', display:'flex', gap:'5px', background:'#f0f0f0', padding:'4px', borderRadius:'20px'}}>
+                {USERS.map(u => (
+                    <button 
+                        key={u} 
+                        onClick={() => setCurrentUser(u)}
+                        style={{
+                            padding:'8px 12px', 
+                            borderRadius:'16px', 
+                            border:'none', 
+                            background: currentUser === u ? '#111' : 'transparent', 
+                            color: currentUser === u ? 'white' : '#888',
+                            fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.2s'
+                        }}
+                    >
+                        {u}
+                    </button>
+                ))}
+            </div>
         </header>
 
         <div style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px', overflowX:'auto' }}>
@@ -210,40 +249,42 @@ function ArmarioContent() {
   );
 }
 
-// --- VISTA CALENDARIO 📅 ---
-function CalendarView() {
-    const [weekStart, setWeekStart] = useState(new Date()); // Fecha de inicio de la semana visible
+// --- VISTA CALENDARIO 📅 (Actualizada para Usuario) ---
+function CalendarView({currentUser}: {currentUser: string}) {
+    const [weekStart, setWeekStart] = useState(new Date());
     const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
     const [selectedDateForAdd, setSelectedDateForAdd] = useState<string | null>(null);
     const [isSelectorOpen, setIsSelectorOpen] = useState(false);
     const [favorites, setFavorites] = useState<Outfit[]>([]);
 
-    // Cargar Planificación
     useEffect(() => {
+        // Cargar Planificación (Filtrado en cliente)
         const q = query(collection(db, 'planning'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
-            setPlannedDays(data);
+            const data = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
+            
+            // Solo mostrar planificación del usuario actual
+            const myPlans = data.filter(p => !p.owner || p.owner === currentUser);
+            setPlannedDays(myPlans);
         });
         
-        // Cargar favoritos para el selector
         const qFav = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
         getDocs(qFav).then(snap => {
-            const favData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
-            setFavorites(favData);
+            const favData = snap.docs
+                .map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
+            // Filtrar favoritos del usuario
+            setFavorites(favData.filter(f => !f.owner || f.owner === currentUser));
         });
 
         return () => unsubscribe();
-    }, []);
+    }, [currentUser]);
 
-    // Generar los 7 días de la semana actual
     const getDaysOfWeek = (start: Date) => {
         const days = [];
-        // Ajustar al lunes anterior (o hoy si es lunes)
         const day = start.getDay();
         const diff = start.getDate() - day + (day === 0 ? -6 : 1); 
         const monday = new Date(start.setDate(diff));
-
         for (let i = 0; i < 7; i++) {
             const d = new Date(monday);
             d.setDate(monday.getDate() + i);
@@ -253,10 +294,7 @@ function CalendarView() {
     };
 
     const days = getDaysOfWeek(new Date(weekStart));
-
-    const formatDateKey = (date: Date) => {
-        return date.toISOString().split('T')[0]; // "2024-12-25"
-    };
+    const formatDateKey = (date: Date) => date.toISOString().split('T')[0];
 
     const handleAddClick = (dateStr: string) => {
         setSelectedDateForAdd(dateStr);
@@ -265,17 +303,15 @@ function CalendarView() {
 
     const confirmPlan = async (outfit: Outfit) => {
         if (!selectedDateForAdd) return;
-        
-        // Borrar si ya hay algo ese día
         const existing = plannedDays.find(p => p.date === selectedDateForAdd);
         if (existing) await deleteDoc(doc(db, 'planning', existing.id));
 
         await addDoc(collection(db, 'planning'), {
             date: selectedDateForAdd,
             outfit: outfit,
+            owner: currentUser, // Guardar dueño
             createdAt: serverTimestamp()
         });
-
         setIsSelectorOpen(false);
         setSelectedDateForAdd(null);
     };
@@ -292,7 +328,6 @@ function CalendarView() {
 
     return (
         <div className="fade-in">
-            {/* Cabecera Semana */}
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
                 <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronLeft size={24}/></button>
                 <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>
@@ -300,8 +335,6 @@ function CalendarView() {
                 </h3>
                 <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronRight size={24}/></button>
             </div>
-
-            {/* Lista de Días */}
             <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
                 {days.map((day) => {
                     const dateKey = formatDateKey(day);
@@ -323,7 +356,6 @@ function CalendarView() {
                                     </button>
                                 )}
                             </div>
-
                             {plan ? (
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
                                     <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.top!.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/></div>
@@ -333,16 +365,12 @@ function CalendarView() {
                                     </div>
                                 </div>
                             ) : (
-                                <div style={{height:'60px', border:'2px dashed #e0e0e0', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'0.8rem'}}>
-                                    Sin planificar
-                                </div>
+                                <div style={{height:'60px', border:'2px dashed #e0e0e0', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'0.8rem'}}>Sin planificar</div>
                             )}
                         </div>
                     );
                 })}
             </div>
-
-            {/* Modal Selector de Favoritos */}
             {isSelectorOpen && (
                 <div className="modal-overlay">
                     <div className="modal-content">
@@ -356,9 +384,7 @@ function CalendarView() {
                                     <div key={fav.id} onClick={() => confirmPlan(fav)} style={{border:'1px solid #eee', borderRadius:'12px', padding:'10px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
                                         <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain'}}/></div>
                                         <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain'}}/></div>
-                                        <div style={{flex:1}}>
-                                            <p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>{fav.top!.estilo} / {fav.bottom!.estilo}</p>
-                                        </div>
+                                        <div style={{flex:1}}><p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>{fav.top!.estilo} / {fav.bottom!.estilo}</p></div>
                                         <Check size={16} />
                                     </div>
                                 ))}
@@ -373,7 +399,7 @@ function CalendarView() {
 
 // --- VISTAS EXISTENTES (Outfit, Armario, Favoritos) ---
 
-function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
+function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -395,7 +421,6 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
         setTimeout(() => {
             let availableTops = tops;
             let tempWarning = '';
-
             if (weather) {
                 if (weather.temp < 15) {
                     const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo'].includes(t.subCategory));
@@ -444,7 +469,11 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
         if (!outfit) return;
         setIsSaving(true);
         try {
-            await addDoc(collection(db, 'favorites'), { ...outfit, createdAt: serverTimestamp() });
+            await addDoc(collection(db, 'favorites'), { 
+                ...outfit, 
+                owner: currentUser, // Guardar dueño
+                createdAt: serverTimestamp() 
+            });
             alert("¡Guardado en Favoritos! ❤️");
         } catch (e) { console.error(e); alert("Error al guardar"); }
         setIsSaving(false);
@@ -507,7 +536,7 @@ function OutfitView({ clothes, weather }: { clothes: Prenda[], weather: any }) {
     );
 }
 
-function FavoritesView() {
+function FavoritesView({currentUser}: {currentUser: string}) {
     const [favorites, setFavorites] = useState<Outfit[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -515,11 +544,12 @@ function FavoritesView() {
         const q = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
-            setFavorites(data);
+            // Filtrar favoritos del usuario
+            setFavorites(data.filter(f => !f.owner || f.owner === currentUser));
             setLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [currentUser]);
 
     const deleteFav = async (id: string) => {
         if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id));
@@ -554,7 +584,7 @@ function FavoritesView() {
     )
 }
 
-function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean }) {
+function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loading: boolean, currentUser: string }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     
     const handleSavePrenda = async (file: File, data: any) => {
@@ -563,7 +593,12 @@ function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean
             const storageRef = ref(storage, `armario/${Date.now()}-${compressedFile.name}`);
             await uploadBytes(storageRef, compressedFile);
             const url = await getDownloadURL(storageRef);
-            await addDoc(collection(db, 'clothes'), { ...data, image: url, createdAt: serverTimestamp() });
+            await addDoc(collection(db, 'clothes'), { 
+                ...data, 
+                image: url, 
+                owner: currentUser, // Guardar dueño
+                createdAt: serverTimestamp() 
+            });
         } catch (error) { console.error(error); alert("Error al guardar"); }
     };
 
@@ -604,7 +639,6 @@ function ArmarioView({ clothes, loading }: { clothes: Prenda[], loading: boolean
     );
 }
 
-// --- MODAL SUBIDA COMPARTIDO ---
 function UploadModal({ onClose, onSave }: any) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
