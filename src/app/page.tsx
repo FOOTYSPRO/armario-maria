@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -40,7 +40,7 @@ const COLOR_REFERENCES = [
 
 interface Prenda { 
   id: string; 
-  owner?: string; // NUEVO: Dueño de la prenda
+  owner?: string;
   name: string; 
   category: 'top' | 'bottom' | 'shoes'; 
   subCategory: string;
@@ -130,15 +130,13 @@ export default function Page() {
 }
 
 function ArmarioContent() {
-  const [currentUser, setCurrentUser] = useState<string>('Maria'); // Estado del Usuario
-  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario'>('outfit');
+  const [currentUser, setCurrentUser] = useState<string>('Maria');
+  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario' | 'stats'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
-  // Cargar Ropa (Filtrada por Usuario)
   useEffect(() => {
-    // Nota: Traemos todo y filtramos en local para evitar problemas de índices en Firestore por ahora.
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
@@ -150,17 +148,12 @@ function ArmarioContent() {
                 colorHex: d.colorHex || '#000000'
             };
         }) as Prenda[];
-
-        // FILTRO DE USUARIO 🕵️‍♂️
-        // Si la prenda no tiene 'owner' (ropa antigua), la mostramos a los dos.
-        // Si tiene 'owner', solo la mostramos si coincide con el currentUser.
+        // Filtro Usuario
         const myClothes = allData.filter(item => !item.owner || item.owner === currentUser);
-        
         setClothes(myClothes);
         setLoading(false);
     });
 
-    // Clima
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -176,7 +169,7 @@ function ArmarioContent() {
         });
     }
     return () => unsubscribe();
-  }, [currentUser]); // <-- Se re-ejecuta al cambiar de usuario
+  }, [currentUser]);
 
   const renderView = () => {
     switch(activeTab) {
@@ -184,6 +177,7 @@ function ArmarioContent() {
         case 'armario': return <ArmarioView clothes={clothes} loading={loading} currentUser={currentUser} />;
         case 'favoritos': return <FavoritesView currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} />;
+        case 'stats': return <StatsView clothes={clothes} />; // NUEVA VISTA
     }
   };
   
@@ -201,7 +195,6 @@ function ArmarioContent() {
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '20px 20px 100px 20px' }}>
         
-        {/* HEADER CON SELECTOR DE USUARIO */}
         <header style={{ marginBottom: '20px', paddingTop: '20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
@@ -210,11 +203,11 @@ function ArmarioContent() {
                 <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
                     {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 
                      activeTab === 'calendario' ? 'Tu semana' :
+                     activeTab === 'stats' ? 'Tu ADN de Estilo' :
                      activeTab === 'favoritos' ? 'Tus favoritos' : 'Tu colección'}
                 </p>
             </div>
             
-            {/* BOTÓN CAMBIO DE PERFIL */}
             <div style={{position:'relative', display:'flex', gap:'5px', background:'#f0f0f0', padding:'4px', borderRadius:'20px'}}>
                 {USERS.map(u => (
                     <button 
@@ -240,6 +233,7 @@ function ArmarioContent() {
             <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
             <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
             <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} />
+            <TabButton label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon={<PieChart size={16} />} />
         </div>
 
         {renderView()}
@@ -249,7 +243,117 @@ function ArmarioContent() {
   );
 }
 
-// --- VISTA CALENDARIO 📅 (Actualizada para Usuario) ---
+// --- VISTA ESTADÍSTICAS (NUEVA 📊) ---
+function StatsView({ clothes }: { clothes: Prenda[] }) {
+    // 1. Cálculos de Estilo
+    const styleCounts = clothes.reduce((acc, curr) => {
+        acc[curr.estilo] = (acc[curr.estilo] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    // 2. Cálculos de Color
+    const colorCounts = clothes.reduce((acc, curr) => {
+        const hex = curr.colorHex;
+        acc[hex] = (acc[hex] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+    
+    // Ordenar colores por uso
+    const sortedColors = Object.entries(colorCounts)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5); // Top 5 colores
+
+    // 3. Salud del Armario (Ratio Tops vs Bottoms)
+    const topsCount = clothes.filter(c => c.category === 'top').length;
+    const bottomsCount = clothes.filter(c => c.category === 'bottom').length;
+    
+    // Si tienes 10 tops, idealmente tendrías ~5 bottoms. 
+    // Ratio saludable: entre 1.5 y 2.5 tops por cada bottom.
+    const ratio = bottomsCount > 0 ? topsCount / bottomsCount : 0;
+    let healthMessage = "Armario Equilibrado ✅";
+    let healthColor = "#4CAF50";
+
+    if (bottomsCount === 0 && topsCount > 0) {
+        healthMessage = "¡Faltan Pantalones! ⚠️";
+        healthColor = "#FF5722";
+    } else if (ratio > 4) {
+        healthMessage = "Demasiados Tops 👕";
+        healthColor = "#FF9800";
+    } else if (ratio < 1) {
+        healthMessage = "Faltan partes de arriba 👚";
+        healthColor = "#FF9800";
+    }
+
+    if (clothes.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
+
+    return (
+        <div className="fade-in">
+            {/* Resumen General */}
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginBottom:'20px'}}>
+                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'20px', textAlign:'center'}}>
+                    <div style={{fontSize:'2.5rem', fontWeight:'900'}}>{clothes.length}</div>
+                    <div style={{fontSize:'0.8rem', color:'#666', fontWeight:'600', textTransform:'uppercase'}}>Prendas Totales</div>
+                </div>
+                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'20px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
+                    <div style={{color: healthColor, fontWeight:'800', marginBottom:'5px'}}><AlertCircle size={24}/></div>
+                    <div style={{fontSize:'0.9rem', fontWeight:'700', color:'#333'}}>{healthMessage}</div>
+                </div>
+            </div>
+
+            {/* Análisis de Estilo */}
+            <div style={{marginBottom:'30px'}}>
+                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
+                    <TrendingUp size={20}/> Estilo Dominante
+                </h3>
+                <div style={{display:'flex', gap:'10px', height:'10px', borderRadius:'5px', overflow:'hidden', marginBottom:'10px'}}>
+                    {STYLES.map(style => {
+                        const count = styleCounts[style.value] || 0;
+                        const percent = (count / clothes.length) * 100;
+                        if(percent === 0) return null;
+                        // Colores hardcodeados para la barra
+                        const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4';
+                        return <div key={style.value} style={{width: `${percent}%`, background: barColor}} title={style.label}></div>
+                    })}
+                </div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>
+                    {STYLES.map(style => {
+                         const count = styleCounts[style.value] || 0;
+                         if(count === 0) return null;
+                         const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4';
+                         return (
+                             <div key={style.value} style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.8rem', color:'#666'}}>
+                                 <div style={{width:'8px', height:'8px', borderRadius:'50%', background: barColor}}></div>
+                                 <b>{style.label}</b> ({Math.round((count/clothes.length)*100)}%)
+                             </div>
+                         )
+                    })}
+                </div>
+            </div>
+
+            {/* Paleta de Colores */}
+            <div>
+                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
+                    <Palette size={20}/> Tu Paleta Top 5
+                </h3>
+                <div style={{display:'flex', gap:'15px'}}>
+                    {sortedColors.map(([hex, count]) => (
+                        <div key={hex} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center'}}>
+                            <div style={{width:'100%', aspectRatio:'1/1', background: hex, borderRadius:'12px', marginBottom:'5px', border:'1px solid rgba(0,0,0,0.1)', boxShadow:'0 4px 10px rgba(0,0,0,0.05)'}}></div>
+                            <span style={{fontSize:'0.75rem', fontWeight:'600'}}>{count}</span>
+                        </div>
+                    ))}
+                </div>
+                {sortedColors.length > 0 && sortedColors[0][0] === '#000000' && (
+                    <p style={{marginTop:'15px', fontSize:'0.8rem', color:'#888', fontStyle:'italic', textAlign:'center'}}>
+                        "El negro nunca falla, pero ¡prueba algo de color!" 😉
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// --- OTRAS VISTAS (Actualizadas con usuario) ---
 function CalendarView({currentUser}: {currentUser: string}) {
     const [weekStart, setWeekStart] = useState(new Date());
     const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
@@ -258,25 +362,16 @@ function CalendarView({currentUser}: {currentUser: string}) {
     const [favorites, setFavorites] = useState<Outfit[]>([]);
 
     useEffect(() => {
-        // Cargar Planificación (Filtrado en cliente)
         const q = query(collection(db, 'planning'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
-            
-            // Solo mostrar planificación del usuario actual
-            const myPlans = data.filter(p => !p.owner || p.owner === currentUser);
-            setPlannedDays(myPlans);
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
+            setPlannedDays(data.filter(p => !p.owner || p.owner === currentUser));
         });
-        
         const qFav = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
         getDocs(qFav).then(snap => {
-            const favData = snap.docs
-                .map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
-            // Filtrar favoritos del usuario
+            const favData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
             setFavorites(favData.filter(f => !f.owner || f.owner === currentUser));
         });
-
         return () => unsubscribe();
     }, [currentUser]);
 
@@ -286,9 +381,7 @@ function CalendarView({currentUser}: {currentUser: string}) {
         const diff = start.getDate() - day + (day === 0 ? -6 : 1); 
         const monday = new Date(start.setDate(diff));
         for (let i = 0; i < 7; i++) {
-            const d = new Date(monday);
-            d.setDate(monday.getDate() + i);
-            days.push(d);
+            const d = new Date(monday); d.setDate(monday.getDate() + i); days.push(d);
         }
         return days;
     };
@@ -296,43 +389,27 @@ function CalendarView({currentUser}: {currentUser: string}) {
     const days = getDaysOfWeek(new Date(weekStart));
     const formatDateKey = (date: Date) => date.toISOString().split('T')[0];
 
-    const handleAddClick = (dateStr: string) => {
-        setSelectedDateForAdd(dateStr);
-        setIsSelectorOpen(true);
-    };
+    const handleAddClick = (dateStr: string) => { setSelectedDateForAdd(dateStr); setIsSelectorOpen(true); };
 
     const confirmPlan = async (outfit: Outfit) => {
         if (!selectedDateForAdd) return;
         const existing = plannedDays.find(p => p.date === selectedDateForAdd);
         if (existing) await deleteDoc(doc(db, 'planning', existing.id));
-
-        await addDoc(collection(db, 'planning'), {
-            date: selectedDateForAdd,
-            outfit: outfit,
-            owner: currentUser, // Guardar dueño
-            createdAt: serverTimestamp()
-        });
-        setIsSelectorOpen(false);
-        setSelectedDateForAdd(null);
+        await addDoc(collection(db, 'planning'), { date: selectedDateForAdd, outfit: outfit, owner: currentUser, createdAt: serverTimestamp() });
+        setIsSelectorOpen(false); setSelectedDateForAdd(null);
     };
 
-    const deletePlan = async (id: string) => {
-        if(confirm("¿Quitar outfit de este día?")) await deleteDoc(doc(db, 'planning', id));
-    };
+    const deletePlan = async (id: string) => { if(confirm("¿Quitar outfit de este día?")) await deleteDoc(doc(db, 'planning', id)); };
 
     const changeWeek = (offset: number) => {
-        const newDate = new Date(weekStart);
-        newDate.setDate(newDate.getDate() + (offset * 7));
-        setWeekStart(newDate);
+        const newDate = new Date(weekStart); newDate.setDate(newDate.getDate() + (offset * 7)); setWeekStart(newDate);
     };
 
     return (
         <div className="fade-in">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
                 <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronLeft size={24}/></button>
-                <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>
-                    {weekStart.toLocaleString('es-ES', { month: 'long' })} {weekStart.getFullYear()}
-                </h3>
+                <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>{weekStart.toLocaleString('es-ES', { month: 'long' })} {weekStart.getFullYear()}</h3>
                 <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronRight size={24}/></button>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
@@ -340,7 +417,6 @@ function CalendarView({currentUser}: {currentUser: string}) {
                     const dateKey = formatDateKey(day);
                     const plan = plannedDays.find(p => p.date === dateKey);
                     const isToday = formatDateKey(new Date()) === dateKey;
-
                     return (
                         <div key={dateKey} style={{background: isToday ? '#fff' : '#f9f9f9', border: isToday ? '2px solid #111' : '1px solid #eee', borderRadius:'16px', padding:'15px'}}>
                             <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
@@ -351,18 +427,14 @@ function CalendarView({currentUser}: {currentUser: string}) {
                                 {plan ? (
                                     <button onClick={() => deletePlan(plan.id)} style={{background:'#ffebee', color:'red', border:'none', borderRadius:'50%', width:'30px', height:'30px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14}/></button>
                                 ) : (
-                                    <button onClick={() => handleAddClick(dateKey)} style={{background:'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}>
-                                        <Plus size={14}/> Añadir
-                                    </button>
+                                    <button onClick={() => handleAddClick(dateKey)} style={{background:'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}><Plus size={14}/> Añadir</button>
                                 )}
                             </div>
                             {plan ? (
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
                                     <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.top!.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/></div>
                                     <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'2px'}}/></div>
-                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                                        {plan.outfit.shoes ? <Image src={plan.outfit.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'2px'}}/> : <Footprints size={16} color="#ccc"/>}
-                                    </div>
+                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{plan.outfit.shoes ? <Image src={plan.outfit.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'2px'}}/> : <Footprints size={16} color="#ccc"/>}</div>
                                 </div>
                             ) : (
                                 <div style={{height:'60px', border:'2px dashed #e0e0e0', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'0.8rem'}}>Sin planificar</div>
@@ -374,10 +446,7 @@ function CalendarView({currentUser}: {currentUser: string}) {
             {isSelectorOpen && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
-                            <h3 style={{margin:0}}>Elige un outfit</h3>
-                            <button onClick={() => setIsSelectorOpen(false)} style={{background:'none', border:'none'}}><X/></button>
-                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}><h3 style={{margin:0}}>Elige un outfit</h3><button onClick={() => setIsSelectorOpen(false)} style={{background:'none', border:'none'}}><X/></button></div>
                         {favorites.length === 0 ? <p>No tienes favoritos guardados.</p> : (
                             <div style={{display:'grid', gap:'10px'}}>
                                 {favorites.map(fav => (
@@ -397,8 +466,6 @@ function CalendarView({currentUser}: {currentUser: string}) {
     );
 }
 
-// --- VISTAS EXISTENTES (Outfit, Armario, Favoritos) ---
-
 function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -406,21 +473,14 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     const [message, setMessage] = useState('');
 
     const generateSmartOutfit = () => {
-        setIsAnimating(true);
-        setMessage('');
+        setIsAnimating(true); setMessage('');
         const tops = clothes.filter(c => c.category === 'top');
         const bottoms = clothes.filter(c => c.category === 'bottom');
         const shoes = clothes.filter(c => c.category === 'shoes');
-
-        if (tops.length === 0 || bottoms.length === 0) {
-            alert("¡Falta ropa! Sube partes de arriba y abajo.");
-            setIsAnimating(false);
-            return;
-        }
+        if (tops.length === 0 || bottoms.length === 0) { alert("¡Falta ropa! Sube partes de arriba y abajo."); setIsAnimating(false); return; }
 
         setTimeout(() => {
-            let availableTops = tops;
-            let tempWarning = '';
+            let availableTops = tops; let tempWarning = '';
             if (weather) {
                 if (weather.temp < 15) {
                     const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo'].includes(t.subCategory));
@@ -430,18 +490,15 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                     if (summerTops.length > 0) { availableTops = summerTops; tempWarning = '☀️ Modo Verano.'; }
                 }
             }
-
             const selectedTop = availableTops[Math.floor(Math.random() * availableTops.length)];
             const topColorInfo = COLOR_REFERENCES.find(c => c.value === selectedTop.colorName);
             const topGroup = topColorInfo?.group || 'neutral';
-
             let compatibleBottoms = bottoms.filter(b => {
                 if (selectedTop.estilo === 'sport' && b.estilo === 'elegant') return false;
                 if (selectedTop.estilo === 'elegant' && b.estilo === 'sport') return false;
                 return true; 
             });
             if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
-
             let bestBottoms = compatibleBottoms;
             if (topGroup !== 'neutral') {
                 const neutralBottoms = compatibleBottoms.filter(b => {
@@ -450,12 +507,9 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 });
                 if (neutralBottoms.length > 0) bestBottoms = neutralBottoms;
             }
-
             const selectedBottom = bestBottoms[Math.floor(Math.random() * bestBottoms.length)];
             const selectedShoes = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
-
             setOutfit({ top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
-            
             if (tempWarning) setMessage(tempWarning);
             else {
                 if (selectedTop.estilo === selectedBottom.estilo) setMessage(`Un look ${selectedTop.estilo} impecable.`);
@@ -466,16 +520,8 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     };
 
     const saveToFavorites = async () => {
-        if (!outfit) return;
-        setIsSaving(true);
-        try {
-            await addDoc(collection(db, 'favorites'), { 
-                ...outfit, 
-                owner: currentUser, // Guardar dueño
-                createdAt: serverTimestamp() 
-            });
-            alert("¡Guardado en Favoritos! ❤️");
-        } catch (e) { console.error(e); alert("Error al guardar"); }
+        if (!outfit) return; setIsSaving(true);
+        try { await addDoc(collection(db, 'favorites'), { ...outfit, owner: currentUser, createdAt: serverTimestamp() }); alert("¡Guardado en Favoritos! ❤️"); } catch (e) { console.error(e); alert("Error al guardar"); }
         setIsSaving(false);
     }
 
@@ -498,33 +544,20 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                     </div>
                 )}
             </div>
-
             {outfit && (
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
-                    <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}>
-                        <Heart size={24} fill={isSaving ? "none" : "#e0245e"} />
-                    </button>
+                    <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}><Heart size={24} fill={isSaving ? "none" : "#e0245e"} /></button>
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
                             <Image src={outfit.top!.image} alt="top" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                            <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
-                                <Badge text={outfit.top!.subCategory} />
-                                <Badge text={COLOR_REFERENCES.find(c=>c.value===outfit.top!.colorName)?.label || ''} color="#fff" />
-                            </div>
+                            <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}><Badge text={outfit.top!.subCategory} /><Badge text={COLOR_REFERENCES.find(c=>c.value===outfit.top!.colorName)?.label || ''} color="#fff" /></div>
                         </div>
-                        <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
-                            <Image src={outfit.bottom!.image} alt="bottom" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                        </div>
-                        <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc' }}>
-                            {outfit.shoes ? (
-                                <Image src={outfit.shoes.image} alt="shoes" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                            ) : <Footprints size={40} />}
-                        </div>
+                        <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}><Image src={outfit.bottom!.image} alt="bottom" fill style={{ objectFit: 'contain', padding:'10px' }} /></div>
+                        <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc' }}>{outfit.shoes ? <Image src={outfit.shoes.image} alt="shoes" fill style={{ objectFit: 'contain', padding:'10px' }} /> : <Footprints size={40} />}</div>
                     </div>
                 </div>
             )}
-
             <div style={{ textAlign: 'center' }}>
                 <button onClick={generateSmartOutfit} disabled={isAnimating} style={{ width: '100%', background: isAnimating ? '#333' : 'white', color: isAnimating ? '#ccc' : '#111', border: '2px solid #111', padding: '20px', borderRadius: '20px', fontSize: '1.1rem', fontWeight: '800', cursor: isAnimating ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', transition: 'all 0.2s', transform: isAnimating ? 'scale(0.98)' : 'scale(1)' }}>
                     {isAnimating ? <RefreshCw className="spin" size={20} /> : <Sparkles size={20} />}
@@ -544,26 +577,19 @@ function FavoritesView({currentUser}: {currentUser: string}) {
         const q = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
-            // Filtrar favoritos del usuario
             setFavorites(data.filter(f => !f.owner || f.owner === currentUser));
             setLoading(false);
         });
         return () => unsubscribe();
     }, [currentUser]);
 
-    const deleteFav = async (id: string) => {
-        if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id));
-    }
-
+    const deleteFav = async (id: string) => { if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id)); }
     if(loading) return <p>Cargando favoritos...</p>;
 
     return (
         <div className="fade-in">
             {favorites.length === 0 ? (
-                 <div style={{textAlign:'center', padding:'40px 20px', color:'#999'}}>
-                    <Heart size={40} style={{marginBottom:'10px', opacity:0.3}} />
-                    <p>Todavía no has guardado ningún look.</p>
-                 </div>
+                 <div style={{textAlign:'center', padding:'40px 20px', color:'#999'}}><Heart size={40} style={{marginBottom:'10px', opacity:0.3}} /><p>Todavía no has guardado ningún look.</p></div>
             ) : (
                 <div style={{display:'grid', gap:'20px'}}>
                     {favorites.map(fav => (
@@ -572,9 +598,7 @@ function FavoritesView({currentUser}: {currentUser: string}) {
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/></div>
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/></div>
-                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                                    {fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}
-                                </div>
+                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}</div>
                             </div>
                         </div>
                     ))}
@@ -593,12 +617,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
             const storageRef = ref(storage, `armario/${Date.now()}-${compressedFile.name}`);
             await uploadBytes(storageRef, compressedFile);
             const url = await getDownloadURL(storageRef);
-            await addDoc(collection(db, 'clothes'), { 
-                ...data, 
-                image: url, 
-                owner: currentUser, // Guardar dueño
-                createdAt: serverTimestamp() 
-            });
+            await addDoc(collection(db, 'clothes'), { ...data, image: url, owner: currentUser, createdAt: serverTimestamp() });
         } catch (error) { console.error(error); alert("Error al guardar"); }
     };
 
@@ -608,11 +627,8 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
         <div className="fade-in">
             <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Tus prendas ({clothes.length})</h2>
-                <button onClick={() => setIsModalOpen(true)} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
-                    <Camera size={24} />
-                </button>
+                <button onClick={() => setIsModalOpen(true)} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}><Camera size={24} /></button>
             </div>
-
             {loading ? <p>Cargando...</p> : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
                     {clothes.map((prenda) => (
@@ -622,19 +638,13 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                                  <button onClick={() => handleDelete(prenda.id)} style={{position:'absolute', top:'8px', right:'8px', background:'white', border:'none', borderRadius:'50%', width:'24px', height:'24px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={12} color="red"/></button>
                             </div>
                             <h3 style={{ fontSize: '0.9rem', fontWeight: '700', margin: '0 0 5px 0' }}>{prenda.name}</h3>
-                            <div style={{display:'flex', gap:'5px', flexWrap:'wrap'}}>
-                                <Badge text={prenda.subCategory} />
-                                <div style={{width:'16px', height:'16px', borderRadius:'50%', background: prenda.colorHex, border:'1px solid #ddd'}}></div>
-                            </div>
+                            <div style={{display:'flex', gap:'5px', flexWrap:'wrap'}}><Badge text={prenda.subCategory} /><div style={{width:'16px', height:'16px', borderRadius:'50%', background: prenda.colorHex, border:'1px solid #ddd'}}></div></div>
                         </div>
                     ))}
                     {clothes.length === 0 && <p style={{color:'#888'}}>¡Sube ropa para empezar!</p>}
                 </div>
             )}
-
-            {isModalOpen && (
-                <UploadModal onClose={() => setIsModalOpen(false)} onSave={handleSavePrenda} />
-            )}
+            {isModalOpen && <UploadModal onClose={() => setIsModalOpen(false)} onSave={handleSavePrenda} />}
         </div>
     );
 }
@@ -644,7 +654,6 @@ function UploadModal({ onClose, onSave }: any) {
     const [file, setFile] = useState<File | null>(null);
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
-    
     const [name, setName] = useState('');
     const [category, setCategory] = useState<'top' | 'bottom' | 'shoes'>('top');
     const [subCategory, setSubCategory] = useState('');
@@ -652,14 +661,12 @@ function UploadModal({ onClose, onSave }: any) {
     const [colorHex, setColorHex] = useState<string>('#ffffff');
     const [colorName, setColorName] = useState<string>('white');
     const [colorLabel, setColorLabel] = useState<string>('Blanco');
-    
     const [isUploading, setIsUploading] = useState(false);
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     const handleUrlFetch = async () => {
-        if (!urlInput) return;
-        setLoadingUrl(true);
+        if (!urlInput) return; setLoadingUrl(true);
         try {
             const res = await fetch(`/api/proxy?url=${encodeURIComponent(urlInput)}`);
             if (!res.ok) throw new Error("Error proxy");
@@ -670,17 +677,12 @@ function UploadModal({ onClose, onSave }: any) {
         setLoadingUrl(false);
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files?.[0]) setFile(e.target.files[0]);
-    };
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0]) setFile(e.target.files[0]); };
 
     useEffect(() => {
         if (!file) return;
-        const url = URL.createObjectURL(file);
-        setPreview(url);
-        const img = new window.Image();
-        img.src = url;
-        img.crossOrigin = "Anonymous";
+        const url = URL.createObjectURL(file); setPreview(url);
+        const img = new window.Image(); img.src = url; img.crossOrigin = "Anonymous";
         img.onload = () => { detectColor(img); };
         return () => URL.revokeObjectURL(url);
     }, [file]);
@@ -696,7 +698,6 @@ function UploadModal({ onClose, onSave }: any) {
         for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i+1]; b += data[i+2]; }
         const count = data.length / 4;
         r = Math.floor(r / count); g = Math.floor(g / count); b = Math.floor(b / count);
-
         const detectedHex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
         setColorHex(detectedHex);
         const closest = findClosestColorName(r,g,b);
@@ -713,21 +714,15 @@ function UploadModal({ onClose, onSave }: any) {
     };
 
     const handleConfirm = async () => {
-        if (!file) return;
-        setIsUploading(true);
+        if (!file) return; setIsUploading(true);
         await onSave(file, { name, category, subCategory, estilo, colorName, colorHex });
-        setIsUploading(false);
-        onClose();
+        setIsUploading(false); onClose();
     };
 
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
-                    <h3 style={{margin:0, fontSize:'1.2rem', fontWeight:'800'}}>Nueva Prenda</h3>
-                    <button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer'}}><X size={20}/></button>
-                </div>
-
+                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}><h3 style={{margin:0, fontSize:'1.2rem', fontWeight:'800'}}>Nueva Prenda</h3><button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer'}}><X size={20}/></button></div>
                 {!file ? (
                     <div style={{marginBottom:'20px'}}>
                         <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
@@ -735,63 +730,23 @@ function UploadModal({ onClose, onSave }: any) {
                             <button onClick={()=>setMode('url')} style={{flex:1, padding:'10px', borderRadius:'10px', border: mode==='url'?'2px solid #111':'1px solid #eee', fontWeight:'600', display:'flex', alignItems:'center', justifyContent:'center', gap:'5px', cursor:'pointer'}}><LinkIcon size={20}/> Enlace Web</button>
                         </div>
                         {mode === 'upload' ? (
-                            <label style={{display:'block', padding:'40px', border:'2px dashed #ccc', borderRadius:'12px', textAlign:'center', cursor:'pointer'}}>
-                                <p style={{fontWeight:'600', color:'#666'}}>Pulsa para subir imagen</p>
-                                <input type="file" onChange={handleFileChange} style={{display:'none'}} accept="image/*" />
-                            </label>
+                            <label style={{display:'block', padding:'40px', border:'2px dashed #ccc', borderRadius:'12px', textAlign:'center', cursor:'pointer'}}><p style={{fontWeight:'600', color:'#666'}}>Pulsa para subir imagen</p><input type="file" onChange={handleFileChange} style={{display:'none'}} accept="image/*" /></label>
                         ) : (
-                            <div>
-                                <input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid #eee', marginBottom:'10px', background:'#f9f9f9'}} />
-                                <button onClick={handleUrlFetch} disabled={!urlInput || loadingUrl} style={{width:'100%', padding:'12px', background:'#111', color:'white', borderRadius:'12px', border:'none', cursor:'pointer', fontWeight:'600'}}>
-                                    {loadingUrl ? 'Descargando...' : 'Obtener Imagen'}
-                                </button>
-                            </div>
+                            <div><input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid #eee', marginBottom:'10px', background:'#f9f9f9'}} /><button onClick={handleUrlFetch} disabled={!urlInput || loadingUrl} style={{width:'100%', padding:'12px', background:'#111', color:'white', borderRadius:'12px', border:'none', cursor:'pointer', fontWeight:'600'}}>{loadingUrl ? 'Descargando...' : 'Obtener Imagen'}</button></div>
                         )}
                     </div>
                 ) : (
                     <>
-                        <div style={{width:'100%', height:'120px', background:'#f4f4f5', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative'}}>
-                            <Image src={preview} alt="Preview" fill style={{objectFit:'contain'}} />
-                            <canvas ref={canvasRef} style={{display:'none'}}></canvas>
-                            <button onClick={()=>setFile(null)} style={{position:'absolute', top:'5px', right:'5px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', padding:'5px', cursor:'pointer'}}><RefreshCw size={14}/></button>
-                        </div>
-                        
+                        <div style={{width:'100%', height:'120px', background:'#f4f4f5', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative'}}><Image src={preview} alt="Preview" fill style={{objectFit:'contain'}} /><canvas ref={canvasRef} style={{display:'none'}}></canvas><button onClick={()=>setFile(null)} style={{position:'absolute', top:'5px', right:'5px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', padding:'5px', cursor:'pointer'}}><RefreshCw size={14}/></button></div>
                         <SectionLabel icon={<Layers size={14}/>} label="TIPO" />
-                        <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
-                            <CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} />
-                            <CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} />
-                            <CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} />
-                        </div>
-                        <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', paddingBottom:'5px', marginBottom:'15px'}}>
-                            {SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}
-                        </div>
-
+                        <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}><CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} /><CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} /><CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} /></div>
+                        <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', paddingBottom:'5px', marginBottom:'15px'}}>{SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}</div>
                         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginBottom:'15px'}}>
-                            <div>
-                                <SectionLabel icon={<Tag size={14}/>} label="ESTILO" />
-                                <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
-                                    {STYLES.map(s => <Chip key={s.value} label={s.label} active={estilo===s.value} onClick={()=>setEstilo(s.value)} />)}
-                                </div>
-                            </div>
-                            <div>
-                                <SectionLabel icon={<Palette size={14}/>} label="COLOR" />
-                                <div style={{position:'relative', width:'100%', height:'45px', borderRadius:'12px', background:'#f9f9f9', border:'1px solid #eee', display:'flex', alignItems:'center', padding:'0 10px', gap:'10px', cursor:'pointer', overflow:'hidden'}}>
-                                    <input type="color" value={colorHex} onChange={(e) => handleManualColorChange(e.target.value)} />
-                                    <div style={{width:'24px', height:'24px', borderRadius:'50%', background: colorHex, border:'1px solid rgba(0,0,0,0.1)', flexShrink:0, pointerEvents:'none'}}></div>
-                                    <div style={{flex:1, display:'flex', flexDirection:'column', pointerEvents:'none'}}>
-                                        <span style={{fontSize:'0.85rem', fontWeight:'700'}}>{colorLabel}</span>
-                                        <span style={{fontSize:'0.65rem', color:'#888', textTransform:'uppercase'}}>{colorHex}</span>
-                                    </div>
-                                    <Edit3 size={14} color="#999" style={{pointerEvents:'none'}}/>
-                                </div>
-                            </div>
+                            <div><SectionLabel icon={<Tag size={14}/>} label="ESTILO" /><div style={{display:'flex', flexDirection:'column', gap:'5px'}}>{STYLES.map(s => <Chip key={s.value} label={s.label} active={estilo===s.value} onClick={()=>setEstilo(s.value)} />)}</div></div>
+                            <div><SectionLabel icon={<Palette size={14}/>} label="COLOR" /><div style={{position:'relative', width:'100%', height:'45px', borderRadius:'12px', background:'#f9f9f9', border:'1px solid #eee', display:'flex', alignItems:'center', padding:'0 10px', gap:'10px', cursor:'pointer', overflow:'hidden'}}><input type="color" value={colorHex} onChange={(e) => handleManualColorChange(e.target.value)} /><div style={{width:'24px', height:'24px', borderRadius:'50%', background: colorHex, border:'1px solid rgba(0,0,0,0.1)', flexShrink:0, pointerEvents:'none'}}></div><div style={{flex:1, display:'flex', flexDirection:'column', pointerEvents:'none'}}><span style={{fontSize:'0.85rem', fontWeight:'700'}}>{colorLabel}</span><span style={{fontSize:'0.65rem', color:'#888', textTransform:'uppercase'}}>{colorHex}</span></div><Edit3 size={14} color="#999" style={{pointerEvents:'none'}}/></div></div>
                         </div>
-
                         <input type="text" placeholder="Nombre (ej. Mi favorita)" value={name} onChange={e => setName(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid #eee', marginBottom:'15px', background:'#f9f9f9'}} />
-
-                        <button disabled={isUploading || !name || !subCategory} onClick={handleConfirm} style={{width:'100%', padding:'15px', background: '#111', color:'white', border:'none', borderRadius:'14px', fontWeight:'700', cursor:'pointer', opacity: isUploading || !name || !subCategory ? 0.5 : 1}}>
-                            {isUploading ? 'Guardando...' : 'Guardar Prenda'}
-                        </button>
+                        <button disabled={isUploading || !name || !subCategory} onClick={handleConfirm} style={{width:'100%', padding:'15px', background: '#111', color:'white', border:'none', borderRadius:'14px', fontWeight:'700', cursor:'pointer', opacity: isUploading || !name || !subCategory ? 0.5 : 1}}>{isUploading ? 'Guardando...' : 'Guardar Prenda'}</button>
                     </>
                 )}
             </div>
