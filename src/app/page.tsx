@@ -791,7 +791,7 @@ function UploadModal({ onClose, onSave }: any) {
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN UNPKG) ---
+    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN JSDELIVR - LA MÁS ROBUSTA) ---
     const processImageWithAI = async (inputFile: File) => {
         setIsProcessingBg(true);
         try {
@@ -799,9 +799,13 @@ function UploadModal({ onClose, onSave }: any) {
             
             console.log("Iniciando eliminación de fondo...");
             
-            // USAMOS ESTA URL QUE ES MÁS ESTABLE
+            // CONFIGURACIÓN DE HIERRO: Usamos jsdelivr apuntando a la estructura correcta
             const config = {
-                publicPath: "https://unpkg.com/@imgly/background-removal-data@1.4.2/dist/", 
+                publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data/dist/", 
+                debug: true, // Esto nos ayudará a ver si hay errores en la consola del navegador
+                progress: (key: string, current: number, total: number) => {
+                    console.log(`Descargando modelo ${key}: ${current} de ${total}`);
+                }
             };
 
             const blob = await removeBackground(inputFile, config);
@@ -810,9 +814,8 @@ function UploadModal({ onClose, onSave }: any) {
             console.log("Fondo eliminado con éxito ✨");
             setFile(processedFile); 
         } catch (e) {
-            console.error("Error quitando el fondo:", e);
-            // Si falla, usamos la original sin drama
-            alert("No se pudo quitar el fondo (Error de red). Usaremos la foto original.");
+            console.error("Error DETALLADO quitando el fondo:", e);
+            alert("No se pudo quitar el fondo. Revisa la consola para más detalles. Usaremos la original.");
             setFile(inputFile); 
         } finally {
             setIsProcessingBg(false);
@@ -822,12 +825,19 @@ function UploadModal({ onClose, onSave }: any) {
     const handleUrlFetch = async () => {
         if (!urlInput) return; setLoadingUrl(true);
         try {
+            // Llamamos a nuestro proxy (src/app/api/proxy/route.ts)
             const res = await fetch(`/api/proxy?url=${encodeURIComponent(urlInput)}`);
             if (!res.ok) throw new Error("Error proxy");
+            
             const blob = await res.blob();
-            const fetchedFile = new File([blob], "downloaded.jpg", { type: blob.type });
+            // Importante: Crear el File con el tipo correcto para que la IA lo entienda
+            const fetchedFile = new File([blob], "downloaded.jpg", { type: "image/jpeg" });
+            
             await processImageWithAI(fetchedFile);
-        } catch (e) { alert("Error enlace"); }
+        } catch (e) { 
+            console.error(e);
+            alert("Error al descargar la imagen desde el enlace. Intenta guardar la foto en tu móvil y subirla."); 
+        }
         setLoadingUrl(false);
     };
 
@@ -891,8 +901,8 @@ function UploadModal({ onClose, onSave }: any) {
                 <div className="modal-content" style={{textAlign:'center', padding:'40px'}}>
                     <div style={{marginBottom:'20px'}}><RefreshCw className="spin" size={40} color="#2196F3" /></div>
                     <h3 style={{fontSize:'1.2rem', fontWeight:'800', margin:'0 0 10px 0'}}>✨ Aplicando Magia IA ✨</h3>
-                    <p style={{color:'#666', margin:0}}>Estamos descargando el cerebro de la IA y limpiando tu imagen...</p>
-                    <p style={{fontSize:'0.8rem', color:'#999', marginTop:'10px'}}>(La primera vez tarda un poco más)</p>
+                    <p style={{color:'#666', margin:0}}>Estamos procesando la imagen...</p>
+                    <p style={{fontSize:'0.8rem', color:'#999', marginTop:'10px'}}>(Si es la primera vez, tardará unos segundos en descargar los modelos)</p>
                     <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                 </div>
             </div>
@@ -919,7 +929,7 @@ function UploadModal({ onClose, onSave }: any) {
                 ) : (
                     <>
                         <div style={{width:'100%', height:'180px', background:'repeating-conic-gradient(#f0f0f0 0% 25%, #ffffff 0% 50%) 50% / 20px 20px', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative', boxShadow:'inset 0 0 10px rgba(0,0,0,0.05)'}}>
-                            <Image src={preview} alt="Preview" fill style={{objectFit:'contain', padding:'10px'}} />
+                            <Image src={preview} alt="Preview" fill style={{objectFit:'contain', padding:'10px'}} unoptimized />
                             <canvas ref={canvasRef} style={{display:'none'}}></canvas>
                             <button onClick={()=>setFile(null)} style={{position:'absolute', top:'5px', right:'5px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', padding:'5px', cursor:'pointer'}}><RefreshCw size={14}/></button>
                         </div>
