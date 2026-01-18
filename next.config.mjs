@@ -1,41 +1,45 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Permitir paquetes modernos
+  // 1. IMPORTANTE: Hemos quitado la librería de IA de aquí para que no intente traducirla y falle.
   transpilePackages: [
-    '@imgly/background-removal', 
-    'firebase', 
+    'firebase',
     '@firebase/auth',
-    '@firebase/storage', 
+    '@firebase/storage',
     '@firebase/firestore'
   ],
 
-  // Permitir imágenes externas
+  // 2. Esto le dice a Next.js: "Estos paquetes son complejos, no intentes optimizarlos en el servidor".
+  serverExternalPackages: ['@imgly/background-removal', 'onnxruntime-web'],
+
+  // 3. Permitimos las fotos de Firebase y del CDN de la IA
   images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
-      { protocol: 'https', hostname: 'static.imgly.com' }, // Permitir el cerebro de la IA
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'static.imgly.com',
+      },
     ],
   },
 
-  // Cabeceras de seguridad para que la IA funcione (SharedArrayBuffer)
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
-          { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
-        ],
-      },
-    ];
-  },
-
-  // Configuración para archivos raros de la IA
+  // 4. Reglas técnicas para que acepte archivos .wasm (el cerebro de la IA)
   webpack: (config) => {
     config.module.rules.push({
       test: /\.wasm$/,
       type: "asset/resource",
     });
+
+    // Esta regla evita que se queje por los archivos .mjs
+    config.module.rules.push({
+      test: /\.m?js$/,
+      resolve: {
+        fullySpecified: false,
+      },
+    });
+
     return config;
   },
 };
