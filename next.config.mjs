@@ -1,37 +1,41 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. Obligamos a procesar las librerías modernas (Firebase + IA)
+  // Permitir paquetes modernos
   transpilePackages: [
-    'undici',
-    'firebase',
-    '@firebase/storage',
-    '@firebase/firestore',
+    '@imgly/background-removal', 
+    'firebase', 
     '@firebase/auth',
-    '@imgly/background-removal',
-    'onnxruntime-web'
+    '@firebase/storage', 
+    '@firebase/firestore'
   ],
 
-  // 2. Permitimos las fotos de Firebase
+  // Permitir imágenes externas
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-      },
+      { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
+      { protocol: 'https', hostname: 'static.imgly.com' }, // Permitir el cerebro de la IA
     ],
   },
 
-  // 3. Regla especial para que la IA no rompa el build
-  webpack: (config) => {
-    // Esto hace que Webpack ignore los errores de "import.meta" en la librería de IA
-    config.module.rules.push({
-      test: /\.m?js$/,
-      type: "javascript/auto",
-      resolve: {
-        fullySpecified: false,
+  // Cabeceras de seguridad para que la IA funcione (SharedArrayBuffer)
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+        ],
       },
-    });
+    ];
+  },
 
+  // Configuración para archivos raros de la IA
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "asset/resource",
+    });
     return config;
   },
 };
