@@ -15,7 +15,6 @@ const USERS = ['Maria', 'Jorge', 'Marta'];
 // --- TIPOS ---
 type Estilo = 'sport' | 'casual' | 'elegant' | 'party';
 
-// Referencia de colores (usamos la misma para principal y secundarios)
 const COLOR_REFERENCES = [
     {value: 'black', label: 'Negro', hex: '#000000', rgb: [0,0,0], group: 'neutral'},
     {value: 'white', label: 'Blanco', hex: '#ffffff', rgb: [255,255,255], group: 'neutral'},
@@ -52,9 +51,9 @@ interface Prenda {
   price?: number;
   category: 'top' | 'bottom' | 'shoes'; 
   subCategory: string;
-  estilos: Estilo[]; // AHORA ES UN ARRAY (MULTI-OPCIÓN)
-  primaryColor: ColorInfo; // COLOR PRINCIPAL
-  secondaryColors?: ColorInfo[]; // COLORES SECUNDARIOS
+  estilos: Estilo[]; 
+  primaryColor: ColorInfo;
+  secondaryColors?: ColorInfo[];
   image: string; 
   dirty?: boolean;
   createdAt?: any;
@@ -103,6 +102,7 @@ const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = URL.createObjectURL(file);
+        // Quitamos el crossOrigin ya que no usamos IA interna
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -158,7 +158,6 @@ function ArmarioContent() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
             const d = doc.data();
-            // Normalización de datos antiguos a la nueva estructura MULTI-OPCIÓN
             const primaryColor = d.primaryColor || { name: d.colorName || 'black', hex: d.colorHex || '#000000' };
             const estilos = d.estilos || (d.estilo ? [d.estilo] : ['casual']);
             
@@ -252,8 +251,7 @@ function ArmarioContent() {
   );
 }
 
-// ... (StatsView, TripView, CalendarView se mantienen igual, solo actualizamos el acceso a datos si es necesario)
-// Voy a poner StatsView actualizado para soportar el array de estilos
+// --- VISTA ESTADÍSTICAS & DINERO (📊💰) ---
 function StatsView({ clothes }: { clothes: Prenda[] }) {
     const cleanClothes = clothes.filter(c => !c.dirty);
     const dirtyClothes = clothes.filter(c => c.dirty);
@@ -303,14 +301,23 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
                 <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}><TrendingUp size={20}/> Estilo Dominante</h3>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>{STYLES.map(style => { const count = styleCounts[style.value] || 0; if(count === 0) return null; const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4'; return (<div key={style.value} style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.8rem', color:'#666'}}><div style={{width:'8px', height:'8px', borderRadius:'50%', background: barColor}}></div><b>{style.label}</b> ({count})</div>)})}</div>
             </div>
+            <div>
+                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}><Palette size={20}/> Tu Paleta Top 5</h3>
+                <div style={{display:'flex', gap:'15px'}}>
+                    {sortedColors.map(([hex, count]) => (
+                        <div key={hex} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center'}}>
+                            <div style={{width:'100%', aspectRatio:'1/1', background: hex, borderRadius:'12px', marginBottom:'5px', border:'1px solid rgba(0,0,0,0.1)', boxShadow:'0 4px 10px rgba(0,0,0,0.05)'}}></div>
+                            <span style={{fontSize:'0.75rem', fontWeight:'600'}}>{count}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }
 
-// --- RESTO DE VISTAS (MALETA, CALENDARIO, FAVORITOS) ---
-// ... (Se mantienen igual, las funciones auxiliares se adaptan solas o no las usan directamente)
+// --- VISTA MALETA 🧳 ---
 function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: string }) {
-    // ... (Código TripView idéntico al anterior)
     const [trips, setTrips] = useState<Trip[]>([]);
     const [isCreating, setIsCreating] = useState(false);
     const [newTripName, setNewTripName] = useState('');
@@ -330,7 +337,9 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
         await addDoc(collection(db, 'trips'), { name: newTripName, items: [], owner: currentUser, createdAt: serverTimestamp() });
         setNewTripName(''); setIsCreating(false);
     };
+
     const deleteTrip = async (id: string) => { if(confirm("¿Borrar maleta?")) await deleteDoc(doc(db, 'trips', id)); setSelectedTrip(null); };
+
     const toggleItemInTrip = async (tripId: string, itemId: string, isAdded: boolean) => {
         const tripRef = doc(db, 'trips', tripId);
         if (isAdded) await updateDoc(tripRef, { items: arrayRemove(itemId) });
@@ -370,6 +379,7 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
             </div>
         );
     }
+
     return (
         <div className="fade-in">
             {isCreating ? (
@@ -399,8 +409,8 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
     );
 }
 
+// --- CALENDARIO 📅 ---
 function CalendarView({currentUser}: {currentUser: string}) {
-    // ... (Código CalendarView idéntico)
     const [weekStart, setWeekStart] = useState(new Date());
     const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
     const [selectedDateForAdd, setSelectedDateForAdd] = useState<string | null>(null);
@@ -431,9 +441,12 @@ function CalendarView({currentUser}: {currentUser: string}) {
         }
         return days;
     };
+
     const days = getDaysOfWeek(new Date(weekStart));
     const formatDateKey = (date: Date) => date.toISOString().split('T')[0];
+
     const handleAddClick = (dateStr: string) => { setSelectedDateForAdd(dateStr); setIsSelectorOpen(true); };
+
     const confirmPlan = async (outfit: Outfit) => {
         if (!selectedDateForAdd) return;
         const existing = plannedDays.find(p => p.date === selectedDateForAdd);
@@ -441,7 +454,9 @@ function CalendarView({currentUser}: {currentUser: string}) {
         await addDoc(collection(db, 'planning'), { date: selectedDateForAdd, outfit: outfit, owner: currentUser, createdAt: serverTimestamp() });
         setIsSelectorOpen(false); setSelectedDateForAdd(null);
     };
+
     const deletePlan = async (id: string) => { if(confirm("¿Quitar outfit de este día?")) await deleteDoc(doc(db, 'planning', id)); };
+
     const changeWeek = (offset: number) => {
         const newDate = new Date(weekStart); newDate.setDate(newDate.getDate() + (offset * 7)); setWeekStart(newDate);
     };
@@ -507,31 +522,50 @@ function CalendarView({currentUser}: {currentUser: string}) {
     );
 }
 
-// --- OUTFIT ---
+// --- OUTFIT VIEW MEJORADO CON FILTRO ---
 function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
+    
+    // ESTADO PARA EL FILTRO DE ESTILO
+    const [filterStyle, setFilterStyle] = useState<Estilo | 'all'>('all');
 
     const generateSmartOutfit = () => {
         setIsAnimating(true); setMessage('');
         
         const cleanClothes = clothes.filter(c => !c.dirty);
-        const tops = cleanClothes.filter(c => c.category === 'top');
-        const bottoms = cleanClothes.filter(c => c.category === 'bottom');
-        const shoes = cleanClothes.filter(c => c.category === 'shoes');
+        
+        // 1. Filtrar primero por el estilo seleccionado por el usuario (si hay)
+        let tops = cleanClothes.filter(c => c.category === 'top');
+        let bottoms = cleanClothes.filter(c => c.category === 'bottom');
+        let shoes = cleanClothes.filter(c => c.category === 'shoes');
+
+        if (filterStyle !== 'all') {
+            tops = tops.filter(c => c.estilos.includes(filterStyle));
+            bottoms = bottoms.filter(c => c.estilos.includes(filterStyle));
+            // Los zapatos somos un poco más flexibles, pero intentamos que encajen
+            const matchingShoes = shoes.filter(c => c.estilos.includes(filterStyle));
+            if (matchingShoes.length > 0) shoes = matchingShoes;
+        }
         
         if (tops.length === 0 || bottoms.length === 0) { 
             const dirtyTops = clothes.filter(c => c.category === 'top' && c.dirty).length;
-            if (dirtyTops > 0 && tops.length === 0) alert("¡No tienes camisetas limpias! Toca poner lavadora 🧺");
-            else alert("¡Falta ropa! Sube partes de arriba y abajo."); 
+            if (filterStyle !== 'all') {
+                alert(`No tienes ropa limpia de estilo "${filterStyle}" para combinar.`);
+            } else if (dirtyTops > 0 && tops.length === 0) {
+                alert("¡No tienes camisetas limpias! Toca poner lavadora 🧺");
+            } else {
+                alert("¡Falta ropa! Sube partes de arriba y abajo."); 
+            }
             setIsAnimating(false); return; 
         }
 
         setTimeout(() => {
             let availableTops = tops; let tempWarning = '';
-            // Filtro por clima
+            
+            // 2. Filtro por clima
             if (weather) {
                 if (weather.temp < 15) {
                     const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo', 'Jersey'].includes(t.subCategory));
@@ -542,26 +576,28 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 }
             }
 
+            // Si al filtrar por clima nos quedamos sin nada, volvemos a usar todos los tops del estilo seleccionado
+            if (availableTops.length === 0) availableTops = tops;
+
             const selectedTop = availableTops[Math.floor(Math.random() * availableTops.length)];
             
-            // Lógica de Matching mejorada con Multi-Estilo
-            // Buscamos partes de abajo que compartan AL MENOS UN estilo con la parte de arriba
+            // 3. Matching
             let compatibleBottoms = bottoms.filter(b => {
                 const sharedStyles = b.estilos.filter(style => selectedTop.estilos.includes(style));
                 return sharedStyles.length > 0;
             });
 
-            // Si no hay match exacto, somos flexibles
             if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
             
-            // Selección final
             const selectedBottom = compatibleBottoms[Math.floor(Math.random() * compatibleBottoms.length)];
             const selectedShoes = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
             
             setOutfit({ top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
             
             if (tempWarning) setMessage(tempWarning);
-            else {
+            else if (filterStyle !== 'all') {
+                setMessage(`Look ${filterStyle} listo para hoy.`);
+            } else {
                 const commonStyles = selectedTop.estilos.filter(s => selectedBottom.estilos.includes(s));
                 if (commonStyles.length > 0) setMessage(`Un look ${commonStyles[0]} ideal.`);
                 else setMessage(`Mix & Match: Experimentando.`);
@@ -595,6 +631,18 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                     </div>
                 )}
             </div>
+            
+            {/* SELECTOR DE ESTILO */}
+            <div style={{marginBottom:'20px'}}>
+                <div style={{fontSize:'0.8rem', fontWeight:'700', color:'#666', marginBottom:'10px', textAlign:'center', textTransform:'uppercase', letterSpacing:'1px'}}>¿Qué te apetece hoy?</div>
+                <div style={{display:'flex', justifyContent:'center', gap:'8px', flexWrap:'wrap'}}>
+                    <button onClick={() => setFilterStyle('all')} style={{padding:'8px 16px', borderRadius:'20px', border: filterStyle === 'all' ? '2px solid #111' : '1px solid #eee', background: filterStyle === 'all' ? '#111' : 'white', color: filterStyle === 'all' ? 'white' : '#666', fontWeight:'600', fontSize:'0.85rem', cursor:'pointer'}}>🎲 Sorpréndeme</button>
+                    {STYLES.map(s => (
+                        <button key={s.value} onClick={() => setFilterStyle(s.value)} style={{padding:'8px 16px', borderRadius:'20px', border: filterStyle === s.value ? '2px solid #111' : '1px solid #eee', background: filterStyle === s.value ? '#111' : 'white', color: filterStyle === s.value ? 'white' : '#666', fontWeight:'600', fontSize:'0.85rem', cursor:'pointer'}}>{s.label}</button>
+                    ))}
+                </div>
+            </div>
+
             {outfit && (
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
                     <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}><Heart size={24} fill={isSaving ? "none" : "#e0245e"} /></button>
@@ -626,6 +674,7 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
 function FavoritesView({currentUser}: {currentUser: string}) {
     const [favorites, setFavorites] = useState<Outfit[]>([]);
     const [loading, setLoading] = useState(true);
+
     useEffect(() => {
         const q = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -635,8 +684,10 @@ function FavoritesView({currentUser}: {currentUser: string}) {
         });
         return () => unsubscribe();
     }, [currentUser]);
+
     const deleteFav = async (id: string) => { if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id)); }
     if(loading) return <p>Cargando favoritos...</p>;
+
     return (
         <div className="fade-in">
             {favorites.length === 0 ? (
@@ -662,10 +713,9 @@ function FavoritesView({currentUser}: {currentUser: string}) {
 function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loading: boolean, currentUser: string }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [search, setSearch] = useState('');
-    const [sortBy, setSortBy] = useState<'date' | 'color' | 'category'>('date'); // NUEVO: Estado de ordenación
-    const [editingPrenda, setEditingPrenda] = useState<Prenda | null>(null); // NUEVO: Estado para editar
+    const [sortBy, setSortBy] = useState<'date' | 'color' | 'category'>('date'); 
+    const [editingPrenda, setEditingPrenda] = useState<Prenda | null>(null);
 
-    // FILTRO DE BÚSQUEDA + MARCAS
     let filteredClothes = clothes.filter(c => 
         c.name.toLowerCase().includes(search.toLowerCase()) || 
         c.subCategory.toLowerCase().includes(search.toLowerCase()) ||
@@ -673,15 +723,10 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
         (c.brand && c.brand.toLowerCase().includes(search.toLowerCase()))
     );
 
-    // LÓGICA DE ORDENACIÓN (SORT)
     filteredClothes.sort((a, b) => {
-        if (sortBy === 'date') {
-            // Asumiendo que los ids de firebase son cronológicos o usar createdAt si existe, sino fallback
-            return (b.createdAt || 0) - (a.createdAt || 0);
-        } else if (sortBy === 'color') {
-            return a.primaryColor.name.localeCompare(b.primaryColor.name);
-        } else if (sortBy === 'category') {
-            // Ordenar primero por Categoría Grande, luego Subcategoría
+        if (sortBy === 'date') return (b.createdAt || 0) - (a.createdAt || 0);
+        else if (sortBy === 'color') return a.primaryColor.name.localeCompare(b.primaryColor.name);
+        else if (sortBy === 'category') {
             if (a.category !== b.category) return a.category.localeCompare(b.category);
             return a.subCategory.localeCompare(b.subCategory);
         }
@@ -692,9 +737,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
 
     const handleSavePrenda = async (data: any, file?: File) => {
         try {
-            let imageUrl = data.image; // Por defecto la que ya tenía si es edit
-            
-            // Si hay archivo nuevo, lo subimos
+            let imageUrl = data.image;
             if (file) {
                 const compressedFile = await compressImage(file);
                 const storageRef = ref(storage, `armario/${Date.now()}-${compressedFile.name}`);
@@ -703,11 +746,9 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
             }
 
             if (data.id) {
-                // MODO EDICIÓN: Actualizar
                 const docRef = doc(db, 'clothes', data.id);
                 await updateDoc(docRef, { ...data, image: imageUrl });
             } else {
-                // MODO CREACIÓN: Nuevo
                 await addDoc(collection(db, 'clothes'), { 
                     ...data, 
                     image: imageUrl, 
@@ -716,7 +757,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                     createdAt: serverTimestamp() 
                 });
             }
-            setEditingPrenda(null); // Cerrar modal y limpiar
+            setEditingPrenda(null); 
         } catch (error) { console.error(error); alert("Error al guardar"); }
     };
 
@@ -731,15 +772,8 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
         alert("¡Lavadora puesta! 🫧");
     };
 
-    const openEdit = (prenda: Prenda) => {
-        setEditingPrenda(prenda);
-        setIsModalOpen(true);
-    };
-
-    const openNew = () => {
-        setEditingPrenda(null);
-        setIsModalOpen(true);
-    }
+    const openEdit = (prenda: Prenda) => { setEditingPrenda(prenda); setIsModalOpen(true); };
+    const openNew = () => { setEditingPrenda(null); setIsModalOpen(true); }
 
     return (
         <div className="fade-in">
@@ -753,7 +787,6 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                 </div>
                 
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    {/* SELECTOR DE ORDEN (SORT) */}
                     <div style={{display:'flex', alignItems:'center', gap:'5px', background:'#f5f5f5', padding:'5px 10px', borderRadius:'10px'}}>
                         <ArrowUpDown size={14} color="#666"/>
                         <select value={sortBy} onChange={(e:any) => setSortBy(e.target.value)} style={{background:'transparent', border:'none', fontSize:'0.85rem', fontWeight:'600', color:'#444'}}>
@@ -783,7 +816,6 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                                  )}
                                  <Image src={prenda.image} alt={prenda.name} fill style={{ objectFit: 'cover' }} />
                                  <div style={{position:'absolute', top:'8px', right:'8px', zIndex:5, display:'flex', gap:'5px'}}>
-                                     {/* BOTÓN EDITAR */}
                                      <button onClick={() => openEdit(prenda)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Edit3 size={14} color="#333"/></button>
                                      <button onClick={() => toggleDirty(prenda.id, prenda.dirty || false)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Droplets size={14} color={prenda.dirty ? '#2196F3' : '#ccc'}/></button>
                                      <button onClick={() => handleDelete(prenda.id)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Trash2 size={14} color="#ff6b6b"/></button>
@@ -795,10 +827,8 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                             </div>
                             <div style={{display:'flex', gap:'5px', flexWrap:'wrap', opacity: prenda.dirty ? 0.5 : 1}}>
                                 <Badge text={prenda.subCategory} />
-                                {/* Muestra el primer estilo si hay varios */}
                                 {prenda.estilos.length > 0 && <Badge text={prenda.estilos[0]} color="#fff" />}
                             </div>
-                            {/* Visualizador de colores */}
                             <div style={{display:'flex', gap:'3px', marginTop:'5px'}}>
                                 <div style={{width:'10px', height:'10px', borderRadius:'50%', background: prenda.primaryColor.hex, border:'1px solid #ddd'}}></div>
                                 {prenda.secondaryColors?.map((sc, idx) => (
@@ -815,24 +845,21 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
     );
 }
 
-// --- MODAL DE SUBIDA/EDICIÓN MEJORADO ---
+// --- MODAL ---
 function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | null, onClose: any, onSave: any }) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
-    // CAMPOS DE DATOS
     const [name, setName] = useState(initialData?.name || '');
     const [brand, setBrand] = useState(initialData?.brand || '');
     const [price, setPrice] = useState(initialData?.price?.toString() || '');
     const [category, setCategory] = useState<'top' | 'bottom' | 'shoes'>(initialData?.category || 'top');
     const [subCategory, setSubCategory] = useState(initialData?.subCategory || '');
     
-    // MULTI-ESTILO
     const [selectedStyles, setSelectedStyles] = useState<Estilo[]>(initialData?.estilos || ['casual']);
 
-    // MULTI-COLOR
     const [primaryColor, setPrimaryColor] = useState<ColorInfo>(initialData?.primaryColor || { name: 'white', hex: '#ffffff' });
     const [secondaryColors, setSecondaryColors] = useState<ColorInfo[]>(initialData?.secondaryColors || []);
 
@@ -840,18 +867,16 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
     const [preview, setPreview] = useState(initialData?.image || '');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // Helpers para cambio de color
     const handleColorPick = (hex: string, type: 'primary' | 'secondary', index?: number) => {
         const rgb = hexToRgb(hex);
         const closest = findClosestColorName(rgb[0], rgb[1], rgb[2]);
-        const colorInfo: ColorInfo = { name: closest.value, hex: hex }; // Usamos el hex real del picker
+        const colorInfo: ColorInfo = { name: closest.value, hex: hex }; 
 
         if (type === 'primary') {
             setPrimaryColor(colorInfo);
         } else if (type === 'secondary') {
-            if (index === -1) { // Añadir nuevo
-                setSecondaryColors([...secondaryColors, colorInfo]);
-            } else if (index !== undefined) { // Editar existente
+            if (index === -1) setSecondaryColors([...secondaryColors, colorInfo]);
+            else if (index !== undefined) {
                 const newSecs = [...secondaryColors];
                 newSecs[index] = colorInfo;
                 setSecondaryColors(newSecs);
@@ -866,11 +891,8 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
     }
 
     const toggleStyle = (style: Estilo) => {
-        if (selectedStyles.includes(style)) {
-            setSelectedStyles(selectedStyles.filter(s => s !== style));
-        } else {
-            setSelectedStyles([...selectedStyles, style]);
-        }
+        if (selectedStyles.includes(style)) setSelectedStyles(selectedStyles.filter(s => s !== style));
+        else setSelectedStyles([...selectedStyles, style]);
     }
 
     const handleUrlFetch = async () => {
@@ -893,7 +915,6 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
         if (!file) return;
         const url = URL.createObjectURL(file);
         setPreview(url);
-        // Autodetectar color principal si es una foto nueva
         const img = new window.Image();
         img.src = url;
         img.crossOrigin = "Anonymous";
@@ -902,7 +923,6 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
     }, [file]);
 
     const detectColor = (img: HTMLImageElement) => {
-        // Solo autodetectamos si no estamos editando (o si el usuario sube foto nueva al editar)
         const canvas = canvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); if (!ctx) return;
         canvas.width = 50; canvas.height = 50;
@@ -919,29 +939,22 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
         else { r = 255; g = 255; b = 255; }
         
         const detectedHex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-        // Actualizamos solo el primario
         const closest = findClosestColorName(r,g,b);
         setPrimaryColor({ name: closest.value, hex: detectedHex });
     };
 
     const handleConfirm = async () => {
-        if (!file && !initialData) return; // Si es nuevo necesita archivo
+        if (!file && !initialData) return; 
         setIsUploading(true);
         
         const finalData = {
-            id: initialData?.id, // Pasamos el ID si existe
-            name, 
-            brand, 
-            price: Number(price), 
-            category, 
-            subCategory, 
-            estilos: selectedStyles, 
-            primaryColor,
-            secondaryColors,
-            image: preview // Mantener antigua si no hay file
+            id: initialData?.id,
+            name, brand, price: Number(price), category, subCategory, 
+            estilos: selectedStyles, primaryColor, secondaryColors,
+            image: preview 
         };
 
-        await onSave(finalData, file); // onSave maneja la lógica de subir o no
+        await onSave(finalData, file); 
         setIsUploading(false); onClose();
     };
 
@@ -953,22 +966,15 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
                     <button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer'}}><X size={20}/></button>
                 </div>
                 
-                {/* PREVIEW DE IMAGEN */}
                 <div style={{width:'100%', height:'180px', background:'repeating-conic-gradient(#f0f0f0 0% 25%, #ffffff 0% 50%) 50% / 20px 20px', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative', boxShadow:'inset 0 0 10px rgba(0,0,0,0.05)'}}>
-                    {preview ? (
-                        <Image src={preview} alt="Preview" fill style={{objectFit:'contain', padding:'10px'}} unoptimized />
-                    ) : (
-                         <div style={{height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc'}}>Sin imagen</div>
-                    )}
+                    {preview ? ( <Image src={preview} alt="Preview" fill style={{objectFit:'contain', padding:'10px'}} unoptimized /> ) : ( <div style={{height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc'}}>Sin imagen</div> )}
                     <canvas ref={canvasRef} style={{display:'none'}}></canvas>
-                    {/* Si no hay imagen inicial, mostramos botones de subida */}
                     {!initialData && !file && (
                          <div style={{position:'absolute', inset:0, background:'rgba(255,255,255,0.8)', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', gap:'10px'}}>
                              <button onClick={()=>setMode('upload')} style={{padding:'8px 15px', background:'#111', color:'white', borderRadius:'8px', border:'none', cursor:'pointer'}}>Subir Foto</button>
                              <button onClick={()=>setMode('url')} style={{padding:'8px 15px', background:'white', border:'1px solid #111', borderRadius:'8px', cursor:'pointer'}}>Enlace URL</button>
                          </div>
                     )}
-                    {/* Si estamos editando o ya hay foto, botón para CAMBIARLA */}
                     {(initialData || file) && (
                         <label style={{position:'absolute', bottom:'10px', right:'10px', background:'rgba(0,0,0,0.6)', color:'white', padding:'5px 10px', borderRadius:'20px', fontSize:'0.7rem', cursor:'pointer', display:'flex', gap:'5px', alignItems:'center'}}>
                             <Edit3 size={12}/> Cambiar foto
@@ -977,7 +983,6 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
                     )}
                 </div>
 
-                {/* Si modo URL y no hay archivo */}
                 {mode === 'url' && !file && !initialData && (
                      <div style={{marginBottom:'15px', display:'flex', gap:'5px'}}>
                         <input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{flex:1, padding:'10px', borderRadius:'8px', border:'1px solid #ddd'}} />
@@ -989,23 +994,13 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
                 <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}><CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} /><CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} /><CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} /></div>
                 <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', paddingBottom:'5px', marginBottom:'15px'}}>{SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}</div>
                 
-                {/* SELECCIÓN DE ESTILOS (MULTI) */}
                 <SectionLabel icon={<Tag size={14}/>} label="ESTILOS (Elige varios)" />
                 <div style={{display:'flex', flexWrap:'wrap', gap:'8px', marginBottom:'20px'}}>
-                    {STYLES.map(s => (
-                        <Chip 
-                            key={s.value} 
-                            label={s.label} 
-                            active={selectedStyles.includes(s.value)} 
-                            onClick={()=>toggleStyle(s.value)} 
-                        />
-                    ))}
+                    {STYLES.map(s => ( <Chip key={s.value} label={s.label} active={selectedStyles.includes(s.value)} onClick={()=>toggleStyle(s.value)} /> ))}
                 </div>
 
-                {/* SELECCIÓN DE COLORES (MULTI) */}
                 <SectionLabel icon={<Palette size={14}/>} label="COLORES" />
                 <div style={{background:'#f9f9f9', padding:'15px', borderRadius:'12px', marginBottom:'20px'}}>
-                    {/* Principal */}
                     <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px'}}>
                         <span style={{fontSize:'0.8rem', fontWeight:'600'}}>Principal:</span>
                         <div style={{position:'relative', width:'40px', height:'40px', borderRadius:'50%', overflow:'hidden', border:'2px solid #fff', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}>
@@ -1013,8 +1008,6 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
                             <div style={{position:'absolute', inset:0, background:primaryColor.hex, pointerEvents:'none'}}></div>
                         </div>
                     </div>
-                    
-                    {/* Secundarios */}
                     <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
                         <span style={{fontSize:'0.8rem', fontWeight:'600'}}>Secundarios:</span>
                         {secondaryColors.map((sc, idx) => (
