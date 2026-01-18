@@ -1,9 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Esto arregla el error de construcción de Firebase
-  transpilePackages: ['undici', 'firebase', '@firebase/storage', '@firebase/firestore', '@firebase/auth'],
-  
-  // ¡ESTO ES LO NUEVO! Autorizamos las fotos de Firebase
+  // 1. Obligamos a procesar las librerías modernas (Firebase + IA)
+  transpilePackages: [
+    'undici',
+    'firebase',
+    '@firebase/storage',
+    '@firebase/firestore',
+    '@firebase/auth',
+    '@imgly/background-removal',
+    'onnxruntime-web'
+  ],
+
+  // 2. Permitimos las fotos de Firebase
   images: {
     remotePatterns: [
       {
@@ -11,6 +19,20 @@ const nextConfig = {
         hostname: 'firebasestorage.googleapis.com',
       },
     ],
+  },
+
+  // 3. Regla especial para que la IA no rompa el build
+  webpack: (config) => {
+    // Esto hace que Webpack ignore los errores de "import.meta" en la librería de IA
+    config.module.rules.push({
+      test: /\.m?js$/,
+      type: "javascript/auto",
+      resolve: {
+        fullySpecified: false,
+      },
+    });
+
+    return config;
   },
 };
 
