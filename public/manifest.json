@@ -1,22 +1,21 @@
 {
-  "name": "Footys Wardrobe",
-  "short_name": "Footys",
-  "theme_color": "#000000",
-  "background_color": "#ffffff",
-  "display": "standalone",
-  "orientation": "portrait",
-  "scope": "/",
+  "name": "Armario de María",
+  "short_name": "Armario",
+  "description": "Organizador de outfits inteligente",
   "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
   "icons": [
     {
-      "src": "https://api.iconify.design/lucide:shirt.svg?color=%23000000",
+      "src": "https://cdn-icons-png.flaticon.com/512/1063/1063196.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png"
     },
     {
-      "src": "https://api.iconify.design/lucide:shirt.svg?color=%23000000",
+      "src": "https://cdn-icons-png.flaticon.com/512/1063/1063196.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png"
     }
   ]
 }
