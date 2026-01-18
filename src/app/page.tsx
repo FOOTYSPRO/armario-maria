@@ -42,8 +42,8 @@ interface Prenda {
   id: string; 
   owner?: string;
   name: string; 
-  brand?: string; // NUEVO: Marca
-  price?: number; // NUEVO: Precio
+  brand?: string;
+  price?: number;
   category: 'top' | 'bottom' | 'shoes'; 
   subCategory: string;
   estilo: Estilo;
@@ -158,8 +158,8 @@ function ArmarioContent() {
                 colorName: d.colorName || d.color || 'black',
                 colorHex: d.colorHex || '#000000',
                 dirty: d.dirty || false,
-                brand: d.brand || '', // Cargar Marca
-                price: d.price || 0   // Cargar Precio
+                brand: d.brand || '',
+                price: d.price || 0
             };
         }) as Prenda[];
         const myClothes = allData.filter(item => !item.owner || item.owner === currentUser);
@@ -247,18 +247,10 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
     const cleanClothes = clothes.filter(c => !c.dirty);
     const dirtyClothes = clothes.filter(c => c.dirty);
 
-    // 1. Dinero Total
     const totalValue = clothes.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-    
-    // 2. Marcas
-    const brandCounts = clothes.reduce((acc, curr) => {
-        const b = curr.brand || 'Sin Marca';
-        acc[b] = (acc[b] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
+    const brandCounts = clothes.reduce((acc, curr) => { const b = curr.brand || 'Sin Marca'; acc[b] = (acc[b] || 0) + 1; return acc; }, {} as Record<string, number>);
     const topBrand = Object.entries(brandCounts).sort(([,a], [,b]) => b - a)[0];
 
-    // 3. Estilos y Colores
     const styleCounts = clothes.reduce((acc, curr) => { acc[curr.estilo] = (acc[curr.estilo] || 0) + 1; return acc; }, {} as Record<string, number>);
     const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.colorHex; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
     const sortedColors = Object.entries(colorCounts).sort(([,a], [,b]) => b - a).slice(0, 5);
@@ -275,31 +267,20 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
 
     return (
         <div className="fade-in">
-            {/* Tarjeta de Valor Financiero */}
             <div style={{background:'linear-gradient(135deg, #111 0%, #333 100%)', color:'white', padding:'25px', borderRadius:'24px', marginBottom:'20px', boxShadow:'0 10px 30px rgba(0,0,0,0.2)'}}>
                 <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'5px', opacity:0.8}}>
                     <Banknote size={20}/> <span style={{fontWeight:'600', textTransform:'uppercase', fontSize:'0.8rem'}}>Valor del Armario</span>
                 </div>
                 <div style={{fontSize:'3rem', fontWeight:'900', lineHeight:'1'}}>{totalValue}€</div>
                 <div style={{marginTop:'15px', display:'flex', gap:'20px'}}>
-                    <div>
-                        <div style={{fontSize:'0.7rem', opacity:0.7, textTransform:'uppercase'}}>Marca Top</div>
-                        <div style={{fontWeight:'700', fontSize:'1.1rem'}}>{topBrand ? topBrand[0] : '-'}</div>
-                    </div>
-                    <div>
-                        <div style={{fontSize:'0.7rem', opacity:0.7, textTransform:'uppercase'}}>Coste Medio</div>
-                        <div style={{fontWeight:'700', fontSize:'1.1rem'}}>{clothes.length > 0 ? Math.round(totalValue/clothes.length) : 0}€ / prenda</div>
-                    </div>
+                    <div><div style={{fontSize:'0.7rem', opacity:0.7, textTransform:'uppercase'}}>Marca Top</div><div style={{fontWeight:'700', fontSize:'1.1rem'}}>{topBrand ? topBrand[0] : '-'}</div></div>
+                    <div><div style={{fontSize:'0.7rem', opacity:0.7, textTransform:'uppercase'}}>Coste Medio</div><div style={{fontWeight:'700', fontSize:'1.1rem'}}>{clothes.length > 0 ? Math.round(totalValue/clothes.length) : 0}€ / prenda</div></div>
                 </div>
             </div>
 
-            {/* Estado de Lavandería */}
             <div style={{background:'#eef', padding:'15px 20px', borderRadius:'16px', marginBottom:'20px', display:'flex', alignItems:'center', gap:'15px'}}>
                 <div style={{background:'white', padding:'10px', borderRadius:'50%'}}><Droplets size={20} color="#2196F3"/></div>
-                <div>
-                    <div style={{fontWeight:'700', fontSize:'0.9rem'}}>Estado Limpieza</div>
-                    <div style={{fontSize:'0.8rem', color:'#666'}}>{dirtyClothes.length} sucias / {cleanClothes.length} limpias</div>
-                </div>
+                <div><div style={{fontWeight:'700', fontSize:'0.9rem'}}>Estado Limpieza</div><div style={{fontSize:'0.8rem', color:'#666'}}>{dirtyClothes.length} sucias / {cleanClothes.length} limpias</div></div>
             </div>
 
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginBottom:'20px'}}>
@@ -793,10 +774,12 @@ function UploadModal({ onClose, onSave }: any) {
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
-    // CAMPOS NUEVOS
+    // Estado para la IA de fondos
+    const [isProcessingBg, setIsProcessingBg] = useState(false);
+
     const [name, setName] = useState('');
-    const [brand, setBrand] = useState(''); // MARCA
-    const [price, setPrice] = useState(''); // PRECIO
+    const [brand, setBrand] = useState('');
+    const [price, setPrice] = useState('');
     
     const [category, setCategory] = useState<'top' | 'bottom' | 'shoes'>('top');
     const [subCategory, setSubCategory] = useState('');
@@ -808,6 +791,28 @@ function UploadModal({ onClose, onSave }: any) {
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
+    // --- FUNCIÓN MÁGICA: QUITAR FONDO ---
+    const processImageWithAI = async (inputFile: File) => {
+        setIsProcessingBg(true);
+        try {
+            // Importación dinámica CORRECTA sin "-js"
+            const imglyRemoveBackground = (await import("@imgly/background-removal")).default;
+            
+            console.log("Iniciando eliminación de fondo...");
+            const blob = await imglyRemoveBackground(inputFile);
+            const processedFile = new File([blob], inputFile.name.replace(/\.[^/.]+$/, "") + "-nobg.png", { type: "image/png" });
+            
+            console.log("Fondo eliminado con éxito ✨");
+            setFile(processedFile); 
+        } catch (e) {
+            console.error("Error quitando el fondo:", e);
+            alert("No se pudo quitar el fondo automáticamente. Se usará la imagen original.");
+            setFile(inputFile); 
+        } finally {
+            setIsProcessingBg(false);
+        }
+    };
+
     const handleUrlFetch = async () => {
         if (!urlInput) return; setLoadingUrl(true);
         try {
@@ -815,17 +820,24 @@ function UploadModal({ onClose, onSave }: any) {
             if (!res.ok) throw new Error("Error proxy");
             const blob = await res.blob();
             const fetchedFile = new File([blob], "downloaded.jpg", { type: blob.type });
-            setFile(fetchedFile); 
+            await processImageWithAI(fetchedFile);
         } catch (e) { alert("Error enlace"); }
         setLoadingUrl(false);
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files?.[0]) setFile(e.target.files[0]); };
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files?.[0]) {
+            await processImageWithAI(e.target.files[0]);
+        }
+    };
 
     useEffect(() => {
         if (!file) return;
-        const url = URL.createObjectURL(file); setPreview(url);
-        const img = new window.Image(); img.src = url; img.crossOrigin = "Anonymous";
+        const url = URL.createObjectURL(file);
+        setPreview(url);
+        const img = new window.Image();
+        img.src = url;
+        img.crossOrigin = "Anonymous";
         img.onload = () => { detectColor(img); };
         return () => URL.revokeObjectURL(url);
     }, [file]);
@@ -834,13 +846,18 @@ function UploadModal({ onClose, onSave }: any) {
         const canvas = canvasRef.current; if (!canvas) return;
         const ctx = canvas.getContext('2d'); if (!ctx) return;
         canvas.width = 50; canvas.height = 50;
+        ctx.clearRect(0, 0, 50, 50);
         ctx.drawImage(img, 0, 0, 50, 50);
         const imageData = ctx.getImageData(10, 10, 30, 30);
         const data = imageData.data;
-        let r = 0, g = 0, b = 0;
-        for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i+1]; b += data[i+2]; }
-        const count = data.length / 4;
-        r = Math.floor(r / count); g = Math.floor(g / count); b = Math.floor(b / count);
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3];
+            if (alpha > 128) { r += data[i]; g += data[i+1]; b += data[i+2]; count++; }
+        }
+        if (count > 0) { r = Math.floor(r / count); g = Math.floor(g / count); b = Math.floor(b / count); } 
+        else { r = 255; g = 255; b = 255; }
+
         const detectedHex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
         setColorHex(detectedHex);
         const closest = findClosestColorName(r,g,b);
@@ -858,10 +875,22 @@ function UploadModal({ onClose, onSave }: any) {
 
     const handleConfirm = async () => {
         if (!file) return; setIsUploading(true);
-        // Guardar con marca y precio
         await onSave(file, { name, brand, price: Number(price), category, subCategory, estilo, colorName, colorHex });
         setIsUploading(false); onClose();
     };
+
+    if (isProcessingBg) {
+        return (
+            <div className="modal-overlay">
+                <div className="modal-content" style={{textAlign:'center', padding:'40px'}}>
+                    <div style={{marginBottom:'20px'}}><RefreshCw className="spin" size={40} color="#2196F3" /></div>
+                    <h3 style={{fontSize:'1.2rem', fontWeight:'800', margin:'0 0 10px 0'}}>✨ Aplicando Magia IA ✨</h3>
+                    <p style={{color:'#666', margin:0}}>Estamos quitando el fondo de tu imagen...</p>
+                    <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="modal-overlay">
@@ -878,10 +907,15 @@ function UploadModal({ onClose, onSave }: any) {
                         ) : (
                             <div><input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid #eee', marginBottom:'10px', background:'#f9f9f9'}} /><button onClick={handleUrlFetch} disabled={!urlInput || loadingUrl} style={{width:'100%', padding:'12px', background:'#111', color:'white', borderRadius:'12px', border:'none', cursor:'pointer', fontWeight:'600'}}>{loadingUrl ? 'Descargando...' : 'Obtener Imagen'}</button></div>
                         )}
+                         <p style={{fontSize:'0.8rem', color:'#999', textAlign:'center', marginTop:'10px'}}>✨ El fondo se eliminará automáticamente ✨</p>
                     </div>
                 ) : (
                     <>
-                        <div style={{width:'100%', height:'120px', background:'#f4f4f5', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative'}}><Image src={preview} alt="Preview" fill style={{objectFit:'contain'}} /><canvas ref={canvasRef} style={{display:'none'}}></canvas><button onClick={()=>setFile(null)} style={{position:'absolute', top:'5px', right:'5px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', padding:'5px', cursor:'pointer'}}><RefreshCw size={14}/></button></div>
+                        <div style={{width:'100%', height:'180px', background:'repeating-conic-gradient(#f0f0f0 0% 25%, #ffffff 0% 50%) 50% / 20px 20px', borderRadius:'12px', overflow:'hidden', marginBottom:'15px', position:'relative', boxShadow:'inset 0 0 10px rgba(0,0,0,0.05)'}}>
+                            <Image src={preview} alt="Preview" fill style={{objectFit:'contain', padding:'10px'}} />
+                            <canvas ref={canvasRef} style={{display:'none'}}></canvas>
+                            <button onClick={()=>setFile(null)} style={{position:'absolute', top:'5px', right:'5px', background:'rgba(0,0,0,0.5)', color:'white', border:'none', borderRadius:'50%', padding:'5px', cursor:'pointer'}}><RefreshCw size={14}/></button>
+                        </div>
                         <SectionLabel icon={<Layers size={14}/>} label="TIPO" />
                         <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}><CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} /><CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} /><CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} /></div>
                         <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', paddingBottom:'5px', marginBottom:'15px'}}>{SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}</div>
