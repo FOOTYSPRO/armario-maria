@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 // --- USUARIOS ---
 const USERS = ['Maria', 'Jorge', 'Marta'];
@@ -65,6 +65,14 @@ interface PlannedDay {
     owner?: string;
     date: string;
     outfit: Outfit;
+}
+
+interface Trip {
+    id: string;
+    owner?: string;
+    name: string;
+    items: string[]; // Array de IDs de prendas
+    createdAt: any;
 }
 
 const SUB_CATEGORIES = {
@@ -131,7 +139,7 @@ export default function Page() {
 
 function ArmarioContent() {
   const [currentUser, setCurrentUser] = useState<string>('Maria');
-  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario' | 'stats'>('outfit');
+  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'favoritos' | 'calendario' | 'stats' | 'maleta'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
@@ -141,14 +149,8 @@ function ArmarioContent() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
             const d = doc.data();
-            return { 
-                id: doc.id, ...d, 
-                estilo: d.estilo || 'casual', 
-                colorName: d.colorName || d.color || 'black',
-                colorHex: d.colorHex || '#000000'
-            };
+            return { id: doc.id, ...d, estilo: d.estilo || 'casual', colorName: d.colorName || d.color || 'black', colorHex: d.colorHex || '#000000' };
         }) as Prenda[];
-        // Filtro Usuario
         const myClothes = allData.filter(item => !item.owner || item.owner === currentUser);
         setClothes(myClothes);
         setLoading(false);
@@ -160,11 +162,7 @@ function ArmarioContent() {
             try {
                 const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
                 const data = await res.json();
-                setWeather({
-                    temp: Math.round(data.current_weather.temperature),
-                    city: "Tu Ubicación",
-                    code: data.current_weather.weathercode
-                });
+                setWeather({ temp: Math.round(data.current_weather.temperature), city: "Tu Ubicación", code: data.current_weather.weathercode });
             } catch (e) { console.error("Error clima", e); }
         });
     }
@@ -177,7 +175,8 @@ function ArmarioContent() {
         case 'armario': return <ArmarioView clothes={clothes} loading={loading} currentUser={currentUser} />;
         case 'favoritos': return <FavoritesView currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} />;
-        case 'stats': return <StatsView clothes={clothes} />; 
+        case 'stats': return <StatsView clothes={clothes} />;
+        case 'maleta': return <TripView clothes={clothes} currentUser={currentUser} />;
     }
   };
   
@@ -203,6 +202,7 @@ function ArmarioContent() {
                 <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
                     {activeTab === 'outfit' ? '¿Qué nos ponemos hoy?' : 
                      activeTab === 'calendario' ? 'Tu semana' :
+                     activeTab === 'maleta' ? 'Viajes y Maletas' :
                      activeTab === 'stats' ? 'Tu ADN de Estilo' :
                      activeTab === 'favoritos' ? 'Tus favoritos' : 'Tu colección'}
                 </p>
@@ -210,20 +210,7 @@ function ArmarioContent() {
             
             <div style={{position:'relative', display:'flex', gap:'5px', background:'#f0f0f0', padding:'4px', borderRadius:'20px'}}>
                 {USERS.map(u => (
-                    <button 
-                        key={u} 
-                        onClick={() => setCurrentUser(u)}
-                        style={{
-                            padding:'8px 12px', 
-                            borderRadius:'16px', 
-                            border:'none', 
-                            background: currentUser === u ? '#111' : 'transparent', 
-                            color: currentUser === u ? 'white' : '#888',
-                            fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.2s'
-                        }}
-                    >
-                        {u}
-                    </button>
+                    <button key={u} onClick={() => setCurrentUser(u)} style={{padding:'8px 12px', borderRadius:'16px', border:'none', background: currentUser === u ? '#111' : 'transparent', color: currentUser === u ? 'white' : '#888', fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.2s'}}>{u}</button>
                 ))}
             </div>
         </header>
@@ -233,6 +220,7 @@ function ArmarioContent() {
             <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
             <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
             <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} />
+            <TabButton label="Maleta" active={activeTab === 'maleta'} onClick={() => setActiveTab('maleta')} icon={<Briefcase size={16} />} />
             <TabButton label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon={<PieChart size={16} />} />
         </div>
 
@@ -243,37 +231,128 @@ function ArmarioContent() {
   );
 }
 
+// --- VISTA MALETA 🧳 (NUEVA) ---
+function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: string }) {
+    const [trips, setTrips] = useState<Trip[]>([]);
+    const [isCreating, setIsCreating] = useState(false);
+    const [newTripName, setNewTripName] = useState('');
+    const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+
+    useEffect(() => {
+        const q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Trip[];
+            setTrips(data.filter(t => !t.owner || t.owner === currentUser));
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const createTrip = async () => {
+        if (!newTripName) return;
+        await addDoc(collection(db, 'trips'), { name: newTripName, items: [], owner: currentUser, createdAt: serverTimestamp() });
+        setNewTripName(''); setIsCreating(false);
+    };
+
+    const deleteTrip = async (id: string) => { if(confirm("¿Borrar maleta?")) await deleteDoc(doc(db, 'trips', id)); setSelectedTrip(null); };
+
+    const toggleItemInTrip = async (tripId: string, itemId: string, isAdded: boolean) => {
+        const tripRef = doc(db, 'trips', tripId);
+        if (isAdded) await updateDoc(tripRef, { items: arrayRemove(itemId) });
+        else await updateDoc(tripRef, { items: arrayUnion(itemId) });
+    };
+
+    if (selectedTrip) {
+        // Vista Detalle Maleta (Seleccionar Ropa)
+        const tripItems = clothes.filter(c => selectedTrip.items.includes(c.id));
+        const tops = tripItems.filter(c => c.category === 'top').length;
+        const bottoms = tripItems.filter(c => c.category === 'bottom').length;
+        const possibleOutfits = tops * bottoms;
+
+        return (
+            <div className="fade-in">
+                <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
+                    <button onClick={() => setSelectedTrip(null)} style={{background:'#f0f0f0', border:'none', borderRadius:'50%', width:'35px', height:'35px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}><ChevronLeft/></button>
+                    <h2 style={{fontSize:'1.5rem', fontWeight:'800', margin:0}}>{selectedTrip.name}</h2>
+                </div>
+
+                <div style={{background:'#111', color:'white', padding:'20px', borderRadius:'16px', marginBottom:'20px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <div>
+                        <div style={{fontSize:'2rem', fontWeight:'900', lineHeight:'1'}}>{tripItems.length}</div>
+                        <div style={{fontSize:'0.8rem', opacity:0.8}}>Prendas</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:'2rem', fontWeight:'900', lineHeight:'1'}}>~{possibleOutfits}</div>
+                        <div style={{fontSize:'0.8rem', opacity:0.8}}>Combinaciones</div>
+                    </div>
+                </div>
+
+                <h3 style={{fontSize:'1rem', fontWeight:'700', marginBottom:'10px'}}>¿Qué te llevas?</h3>
+                <div style={{display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px'}}>
+                    {clothes.map(prenda => {
+                        const isSelected = selectedTrip.items.includes(prenda.id);
+                        return (
+                            <div key={prenda.id} onClick={() => toggleItemInTrip(selectedTrip.id, prenda.id, isSelected)} style={{position:'relative', opacity: isSelected ? 1 : 0.6, transform: isSelected ? 'scale(1)' : 'scale(0.95)', transition:'all 0.2s', cursor:'pointer'}}>
+                                <div style={{aspectRatio:'3/4', background:'#f9f9f9', borderRadius:'12px', overflow:'hidden', position:'relative', border: isSelected ? '3px solid #111' : '1px solid #eee'}}>
+                                    <Image src={prenda.image} alt={prenda.name} fill style={{objectFit:'cover'}} />
+                                    {isSelected && <div style={{position:'absolute', top:'5px', right:'5px', background:'#111', color:'white', borderRadius:'50%', padding:'2px'}}><Check size={12}/></div>}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fade-in">
+            {isCreating ? (
+                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'16px', marginBottom:'20px'}}>
+                    <h3 style={{marginTop:0}}>Nueva Maleta</h3>
+                    <input type="text" placeholder="Ej: Fin de semana rural" value={newTripName} onChange={e => setNewTripName(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #ddd', marginBottom:'10px'}} />
+                    <div style={{display:'flex', gap:'10px'}}>
+                        <button onClick={createTrip} style={{flex:1, background:'#111', color:'white', border:'none', padding:'10px', borderRadius:'10px', fontWeight:'700'}}>Crear</button>
+                        <button onClick={() => setIsCreating(false)} style={{flex:1, background:'transparent', color:'#666', border:'1px solid #ddd', padding:'10px', borderRadius:'10px'}}>Cancelar</button>
+                    </div>
+                </div>
+            ) : (
+                <button onClick={() => setIsCreating(true)} style={{width:'100%', padding:'15px', background:'#f9f9f9', border:'2px dashed #ddd', borderRadius:'16px', color:'#666', fontWeight:'600', marginBottom:'20px', cursor:'pointer'}}>+ Crear nuevo viaje</button>
+            )}
+
+            <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
+                {trips.map(trip => (
+                    <div key={trip.id} onClick={() => setSelectedTrip(trip)} style={{background:'white', border:'1px solid #eee', borderRadius:'16px', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.02)'}}>
+                        <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+                            <div style={{background:'#eef', padding:'10px', borderRadius:'12px'}}><Briefcase size={20} color="#333"/></div>
+                            <div>
+                                <div style={{fontWeight:'700', fontSize:'1rem'}}>{trip.name}</div>
+                                <div style={{fontSize:'0.8rem', color:'#888'}}>{trip.items.length} prendas</div>
+                            </div>
+                        </div>
+                        <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                            <button onClick={(e) => {e.stopPropagation(); deleteTrip(trip.id)}} style={{background:'none', border:'none', color:'#faa', cursor:'pointer'}}><Trash2 size={16}/></button>
+                            <ArrowRight size={16} color="#ccc"/>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 // --- VISTA ESTADÍSTICAS (📊) ---
 function StatsView({ clothes }: { clothes: Prenda[] }) {
-    const styleCounts = clothes.reduce((acc, curr) => {
-        acc[curr.estilo] = (acc[curr.estilo] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
-
-    const colorCounts = clothes.reduce((acc, curr) => {
-        const hex = curr.colorHex;
-        acc[hex] = (acc[hex] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
-    
+    const styleCounts = clothes.reduce((acc, curr) => { acc[curr.estilo] = (acc[curr.estilo] || 0) + 1; return acc; }, {} as Record<string, number>);
+    const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.colorHex; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
     const sortedColors = Object.entries(colorCounts).sort(([,a], [,b]) => b - a).slice(0, 5);
     const topsCount = clothes.filter(c => c.category === 'top').length;
     const bottomsCount = clothes.filter(c => c.category === 'bottom').length;
-    
     const ratio = bottomsCount > 0 ? topsCount / bottomsCount : 0;
     let healthMessage = "Armario Equilibrado ✅";
     let healthColor = "#4CAF50";
-
-    if (bottomsCount === 0 && topsCount > 0) {
-        healthMessage = "¡Faltan Pantalones! ⚠️";
-        healthColor = "#FF5722";
-    } else if (ratio > 4) {
-        healthMessage = "Demasiados Tops 👕";
-        healthColor = "#FF9800";
-    } else if (ratio < 1) {
-        healthMessage = "Faltan partes de arriba 👚";
-        healthColor = "#FF9800";
-    }
+    if (bottomsCount === 0 && topsCount > 0) { healthMessage = "¡Faltan Pantalones! ⚠️"; healthColor = "#FF5722"; }
+    else if (ratio > 4) { healthMessage = "Demasiados Tops 👕"; healthColor = "#FF9800"; }
+    else if (ratio < 1) { healthMessage = "Faltan partes de arriba 👚"; healthColor = "#FF9800"; }
 
     if (clothes.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
 
@@ -282,46 +361,26 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginBottom:'20px'}}>
                 <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'20px', textAlign:'center'}}>
                     <div style={{fontSize:'2.5rem', fontWeight:'900'}}>{clothes.length}</div>
-                    <div style={{fontSize:'0.8rem', color:'#666', fontWeight:'600', textTransform:'uppercase'}}>Prendas Totales</div>
+                    <div style={{fontSize:'0.8rem', color:'#666', fontWeight:'600', textTransform:'uppercase'}}>Prendas</div>
                 </div>
                 <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'20px', textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
                     <div style={{color: healthColor, fontWeight:'800', marginBottom:'5px'}}><AlertCircle size={24}/></div>
                     <div style={{fontSize:'0.9rem', fontWeight:'700', color:'#333'}}>{healthMessage}</div>
                 </div>
             </div>
-
             <div style={{marginBottom:'30px'}}>
-                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
-                    <TrendingUp size={20}/> Estilo Dominante
-                </h3>
+                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}><TrendingUp size={20}/> Estilo Dominante</h3>
                 <div style={{display:'flex', gap:'10px', height:'10px', borderRadius:'5px', overflow:'hidden', marginBottom:'10px'}}>
                     {STYLES.map(style => {
-                        const count = styleCounts[style.value] || 0;
-                        const percent = (count / clothes.length) * 100;
-                        if(percent === 0) return null;
+                        const count = styleCounts[style.value] || 0; const percent = (count / clothes.length) * 100; if(percent === 0) return null;
                         const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4';
                         return <div key={style.value} style={{width: `${percent}%`, background: barColor}} title={style.label}></div>
                     })}
                 </div>
-                <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>
-                    {STYLES.map(style => {
-                         const count = styleCounts[style.value] || 0;
-                         if(count === 0) return null;
-                         const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4';
-                         return (
-                             <div key={style.value} style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.8rem', color:'#666'}}>
-                                 <div style={{width:'8px', height:'8px', borderRadius:'50%', background: barColor}}></div>
-                                 <b>{style.label}</b> ({Math.round((count/clothes.length)*100)}%)
-                             </div>
-                         )
-                    })}
-                </div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>{STYLES.map(style => { const count = styleCounts[style.value] || 0; if(count === 0) return null; const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4'; return (<div key={style.value} style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.8rem', color:'#666'}}><div style={{width:'8px', height:'8px', borderRadius:'50%', background: barColor}}></div><b>{style.label}</b> ({Math.round((count/clothes.length)*100)}%)</div>)})}</div>
             </div>
-
             <div>
-                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
-                    <Palette size={20}/> Tu Paleta Top 5
-                </h3>
+                <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}><Palette size={20}/> Tu Paleta Top 5</h3>
                 <div style={{display:'flex', gap:'15px'}}>
                     {sortedColors.map(([hex, count]) => (
                         <div key={hex} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center'}}>
@@ -448,7 +507,7 @@ function CalendarView({currentUser}: {currentUser: string}) {
     );
 }
 
-// --- VISTAS EXISTENTES ---
+// --- OUTFIT ---
 function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -593,6 +652,16 @@ function FavoritesView({currentUser}: {currentUser: string}) {
 
 function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loading: boolean, currentUser: string }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    
+    // FILTRO DE BÚSQUEDA 🔍
+    const filteredClothes = clothes.filter(c => 
+        c.name.toLowerCase().includes(search.toLowerCase()) || 
+        c.subCategory.toLowerCase().includes(search.toLowerCase()) ||
+        c.estilo.toLowerCase().includes(search.toLowerCase()) ||
+        c.colorName.toLowerCase().includes(search.toLowerCase())
+    );
+
     const handleSavePrenda = async (file: File, data: any) => {
         try {
             const compressedFile = await compressImage(file);
@@ -606,13 +675,22 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
 
     return (
         <div className="fade-in">
-            <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Tus prendas ({clothes.length})</h2>
-                <button onClick={() => setIsModalOpen(true)} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}><Camera size={24} /></button>
+            <div style={{ marginBottom: '20px', display: 'flex', gap:'10px', alignItems: 'center' }}>
+                <div style={{flex:1, position:'relative'}}>
+                    <Search size={18} style={{position:'absolute', left:'12px', top:'12px', color:'#999'}}/>
+                    <input 
+                        type="text" 
+                        placeholder="Buscar (ej: roja, sport...)" 
+                        value={search} 
+                        onChange={e => setSearch(e.target.value)}
+                        style={{width:'100%', padding:'12px 12px 12px 40px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9', fontSize:'0.9rem'}}
+                    />
+                </div>
+                <button onClick={() => setIsModalOpen(true)} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', flexShrink:0 }}><Camera size={24} /></button>
             </div>
             {loading ? <p>Cargando...</p> : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
-                    {clothes.map((prenda) => (
+                    {filteredClothes.map((prenda) => (
                         <div key={prenda.id} style={{ position: 'relative' }}>
                             <div style={{ aspectRatio: '3/4', background: '#f4f4f5', borderRadius: '20px', overflow: 'hidden', marginBottom: '8px', position: 'relative' }}>
                                  <Image src={prenda.image} alt={prenda.name} fill style={{ objectFit: 'cover' }} />
