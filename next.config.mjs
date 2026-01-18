@@ -1,10 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. IMPORTANTE: Le decimos a Next.js que NO intente procesar/transpilar estos paquetes.
-  // Esto evita el error de "import outside of module".
+  // Evitamos que intente procesar estas librerías pesadas en el servidor
   serverExternalPackages: ['@imgly/background-removal', 'onnxruntime-web'],
 
-  // 2. Permitimos las fotos de Firebase y otros sitios necesarios
+  // Permitimos imágenes de Firebase y del CDN de la IA
   images: {
     remotePatterns: [
       {
@@ -18,19 +17,15 @@ const nextConfig = {
     ],
   },
 
-  // 3. Reglas para que Webpack sepa cómo tratar los archivos de la IA
+  // Reglas para que Webpack no se queje de los archivos .wasm ni .mjs
   webpack: (config) => {
-    // Regla para archivos .wasm (el cerebro de la IA)
     config.module.rules.push({
       test: /\.wasm$/,
       type: "asset/resource",
     });
 
-    // Regla CRÍTICA: Esto le dice a Webpack que los archivos .mjs son código moderno
-    // y debe dejar de intentar analizarlos como si fueran scripts antiguos.
     config.module.rules.push({
       test: /\.m?js$/,
-      type: "javascript/auto",
       resolve: {
         fullySpecified: false,
       },
