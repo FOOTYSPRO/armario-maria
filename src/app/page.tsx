@@ -774,7 +774,8 @@ function UploadModal({ onClose, onSave }: any) {
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
-    const [isProcessingBg, setIsProcessingBg] = useState(false); 
+    // Estado para la IA de fondos
+    const [isProcessingBg, setIsProcessingBg] = useState(false);
 
     const [name, setName] = useState('');
     const [brand, setBrand] = useState('');
@@ -790,23 +791,27 @@ function UploadModal({ onClose, onSave }: any) {
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // --- FUNCIÓN MÁGICA: QUITAR FONDO ---
+    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN CDN) ---
     const processImageWithAI = async (inputFile: File) => {
         setIsProcessingBg(true);
         try {
-            // CORRECCIÓN: Usamos destructuración para sacar la función específica
             const { removeBackground } = await import("@imgly/background-removal");
             
             console.log("Iniciando eliminación de fondo...");
-            // Usamos la función importada
-            const blob = await removeBackground(inputFile);
+            
+            // Le decimos dónde buscar los modelos (CDN público) para evitar errores 404
+            const config = {
+                publicPath: "https://static.imgly.com/lib/background-removal-js/v1.5.5/",
+            };
+
+            const blob = await removeBackground(inputFile, config);
             const processedFile = new File([blob], inputFile.name.replace(/\.[^/.]+$/, "") + "-nobg.png", { type: "image/png" });
             
             console.log("Fondo eliminado con éxito ✨");
             setFile(processedFile); 
         } catch (e) {
             console.error("Error quitando el fondo:", e);
-            alert("No se pudo quitar el fondo automáticamente. Se usará la imagen original.");
+            alert("La IA está perezosa hoy (Error de conexión). Se usará la imagen original.");
             setFile(inputFile); 
         } finally {
             setIsProcessingBg(false);
@@ -885,7 +890,8 @@ function UploadModal({ onClose, onSave }: any) {
                 <div className="modal-content" style={{textAlign:'center', padding:'40px'}}>
                     <div style={{marginBottom:'20px'}}><RefreshCw className="spin" size={40} color="#2196F3" /></div>
                     <h3 style={{fontSize:'1.2rem', fontWeight:'800', margin:'0 0 10px 0'}}>✨ Aplicando Magia IA ✨</h3>
-                    <p style={{color:'#666', margin:0}}>Estamos quitando el fondo de tu imagen...</p>
+                    <p style={{color:'#666', margin:0}}>Estamos descargando el cerebro de la IA y limpiando tu imagen...</p>
+                    <p style={{fontSize:'0.8rem', color:'#999', marginTop:'10px'}}>(La primera vez tarda un poco más)</p>
                     <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                 </div>
             </div>
