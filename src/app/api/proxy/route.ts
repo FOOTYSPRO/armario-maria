@@ -9,19 +9,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 1. Nuestro servidor pide la foto a Zara (o quien sea)
+    // 1. Pedimos la foto a la web original
     const response = await fetch(imageUrl);
     
     if (!response.ok) throw new Error('Error al descargar imagen');
 
-    // 2. Convertimos la imagen a datos puros (ArrayBuffer)
+    // 2. Convertimos a datos puros
     const imageBuffer = await response.arrayBuffer();
 
-    // 3. Se la devolvemos a tu web "limpia" de bloqueos
+    // 3. Devolvemos la imagen con permisos abiertos
     return new NextResponse(imageBuffer, {
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-        'Access-Control-Allow-Origin': '*', // Permitimos todo
+        'Access-Control-Allow-Origin': '*', 
+        'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
   } catch (error) {
