@@ -774,8 +774,7 @@ function UploadModal({ onClose, onSave }: any) {
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
-    // Estado para la IA de fondos
-    const [isProcessingBg, setIsProcessingBg] = useState(false);
+    const [isProcessingBg, setIsProcessingBg] = useState(false); 
 
     const [name, setName] = useState('');
     const [brand, setBrand] = useState('');
@@ -795,11 +794,12 @@ function UploadModal({ onClose, onSave }: any) {
     const processImageWithAI = async (inputFile: File) => {
         setIsProcessingBg(true);
         try {
-            // Importación dinámica CORRECTA sin "-js"
-            const imglyRemoveBackground = (await import("@imgly/background-removal")).default;
+            // CORRECCIÓN: Usamos destructuración para sacar la función específica
+            const { removeBackground } = await import("@imgly/background-removal");
             
             console.log("Iniciando eliminación de fondo...");
-            const blob = await imglyRemoveBackground(inputFile);
+            // Usamos la función importada
+            const blob = await removeBackground(inputFile);
             const processedFile = new File([blob], inputFile.name.replace(/\.[^/.]+$/, "") + "-nobg.png", { type: "image/png" });
             
             console.log("Fondo eliminado con éxito ✨");
