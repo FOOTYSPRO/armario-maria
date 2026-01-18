@@ -96,7 +96,7 @@ const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = URL.createObjectURL(file);
-        img.crossOrigin = "Anonymous";
+        // Quitamos el crossOrigin porque ahora no manipulamos la imagen con IA
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -774,8 +774,8 @@ function UploadModal({ onClose, onSave }: any) {
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
-    // Estado para la IA de fondos
-    const [isProcessingBg, setIsProcessingBg] = useState(false);
+    // Hemos quitado la carga de la IA
+    const [isProcessingBg, setIsProcessingBg] = useState(false); 
 
     const [name, setName] = useState('');
     const [brand, setBrand] = useState('');
@@ -791,53 +791,22 @@ function UploadModal({ onClose, onSave }: any) {
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN JSDELIVR - LA MÁS ROBUSTA) ---
+    // --- FUNCIÓN ESTÁNDAR: SOLO SUBIR IMAGEN (SIN IA) ---
     const processImageWithAI = async (inputFile: File) => {
-        setIsProcessingBg(true);
-        try {
-            const { removeBackground } = await import("@imgly/background-removal");
-            
-            console.log("Iniciando eliminación de fondo...");
-            
-            // CONFIGURACIÓN DE HIERRO: Usamos jsdelivr apuntando a la estructura correcta
-            const config = {
-                publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data/dist/", 
-                debug: true, 
-                progress: (key: string, current: number, total: number) => {
-                    console.log(`Descargando modelo ${key}: ${current} de ${total}`);
-                }
-            };
-
-            const blob = await removeBackground(inputFile, config);
-            const processedFile = new File([blob], inputFile.name.replace(/\.[^/.]+$/, "") + "-nobg.png", { type: "image/png" });
-            
-            console.log("Fondo eliminado con éxito ✨");
-            setFile(processedFile); 
-        } catch (e) {
-            console.error("Error DETALLADO quitando el fondo:", e);
-            alert("No se pudo quitar el fondo. Revisa la consola para más detalles. Usaremos la original.");
-            setFile(inputFile); 
-        } finally {
-            setIsProcessingBg(false);
-        }
+        // Simplemente pasamos el archivo directamente
+        setFile(inputFile); 
     };
 
     const handleUrlFetch = async () => {
         if (!urlInput) return; setLoadingUrl(true);
         try {
-            // Llamamos a nuestro proxy (src/app/api/proxy/route.ts)
             const res = await fetch(`/api/proxy?url=${encodeURIComponent(urlInput)}`);
             if (!res.ok) throw new Error("Error proxy");
-            
             const blob = await res.blob();
-            // Importante: Crear el File con el tipo correcto para que la IA lo entienda
+            // IMPORTANTE: Aseguramos el tipo MIME correcto
             const fetchedFile = new File([blob], "downloaded.jpg", { type: "image/jpeg" });
-            
             await processImageWithAI(fetchedFile);
-        } catch (e) { 
-            console.error(e);
-            alert("Error al descargar la imagen desde el enlace. Intenta guardar la foto en tu móvil y subirla."); 
-        }
+        } catch (e) { alert("Error enlace"); }
         setLoadingUrl(false);
     };
 
@@ -900,9 +869,7 @@ function UploadModal({ onClose, onSave }: any) {
             <div className="modal-overlay">
                 <div className="modal-content" style={{textAlign:'center', padding:'40px'}}>
                     <div style={{marginBottom:'20px'}}><RefreshCw className="spin" size={40} color="#2196F3" /></div>
-                    <h3 style={{fontSize:'1.2rem', fontWeight:'800', margin:'0 0 10px 0'}}>✨ Aplicando Magia IA ✨</h3>
-                    <p style={{color:'#666', margin:0}}>Estamos procesando la imagen...</p>
-                    <p style={{fontSize:'0.8rem', color:'#999', marginTop:'10px'}}>(Si es la primera vez, tardará unos segundos en descargar los modelos)</p>
+                    <h3 style={{fontSize:'1.2rem', fontWeight:'800', margin:'0 0 10px 0'}}>Procesando...</h3>
                     <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                 </div>
             </div>
@@ -924,7 +891,6 @@ function UploadModal({ onClose, onSave }: any) {
                         ) : (
                             <div><input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'12px', border:'1px solid #eee', marginBottom:'10px', background:'#f9f9f9'}} /><button onClick={handleUrlFetch} disabled={!urlInput || loadingUrl} style={{width:'100%', padding:'12px', background:'#111', color:'white', borderRadius:'12px', border:'none', cursor:'pointer', fontWeight:'600'}}>{loadingUrl ? 'Descargando...' : 'Obtener Imagen'}</button></div>
                         )}
-                         <p style={{fontSize:'0.8rem', color:'#999', textAlign:'center', marginTop:'10px'}}>✨ El fondo se eliminará automáticamente ✨</p>
                     </div>
                 ) : (
                     <>
