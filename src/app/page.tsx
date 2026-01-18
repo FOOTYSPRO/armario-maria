@@ -791,7 +791,7 @@ function UploadModal({ onClose, onSave }: any) {
     const [preview, setPreview] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN CDN) ---
+    // --- FUNCIÓN MÁGICA: QUITAR FONDO (VERSIÓN UNPKG) ---
     const processImageWithAI = async (inputFile: File) => {
         setIsProcessingBg(true);
         try {
@@ -799,9 +799,9 @@ function UploadModal({ onClose, onSave }: any) {
             
             console.log("Iniciando eliminación de fondo...");
             
-            // Le decimos dónde buscar los modelos (CDN público) para evitar errores 404
+            // USAMOS ESTA URL QUE ES MÁS ESTABLE
             const config = {
-                publicPath: "https://static.imgly.com/lib/background-removal-js/v1.5.5/",
+                publicPath: "https://unpkg.com/@imgly/background-removal-data@1.4.2/dist/", 
             };
 
             const blob = await removeBackground(inputFile, config);
@@ -811,7 +811,8 @@ function UploadModal({ onClose, onSave }: any) {
             setFile(processedFile); 
         } catch (e) {
             console.error("Error quitando el fondo:", e);
-            alert("La IA está perezosa hoy (Error de conexión). Se usará la imagen original.");
+            // Si falla, usamos la original sin drama
+            alert("No se pudo quitar el fondo (Error de red). Usaremos la foto original.");
             setFile(inputFile); 
         } finally {
             setIsProcessingBg(false);
