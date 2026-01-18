@@ -10,7 +10,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, getDocs } from 'firebase/firestore';
 
 // --- USUARIOS ---
-const USERS = ['Maria', 'Jorge'];
+const USERS = ['Maria', 'Jorge', 'Marta'];
 
 // --- TIPOS ---
 type Estilo = 'sport' | 'casual' | 'elegant' | 'party';
@@ -177,7 +177,7 @@ function ArmarioContent() {
         case 'armario': return <ArmarioView clothes={clothes} loading={loading} currentUser={currentUser} />;
         case 'favoritos': return <FavoritesView currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} />;
-        case 'stats': return <StatsView clothes={clothes} />; // NUEVA VISTA
+        case 'stats': return <StatsView clothes={clothes} />; 
     }
   };
   
@@ -243,32 +243,23 @@ function ArmarioContent() {
   );
 }
 
-// --- VISTA ESTADÍSTICAS (NUEVA 📊) ---
+// --- VISTA ESTADÍSTICAS (📊) ---
 function StatsView({ clothes }: { clothes: Prenda[] }) {
-    // 1. Cálculos de Estilo
     const styleCounts = clothes.reduce((acc, curr) => {
         acc[curr.estilo] = (acc[curr.estilo] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
 
-    // 2. Cálculos de Color
     const colorCounts = clothes.reduce((acc, curr) => {
         const hex = curr.colorHex;
         acc[hex] = (acc[hex] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
     
-    // Ordenar colores por uso
-    const sortedColors = Object.entries(colorCounts)
-        .sort(([,a], [,b]) => b - a)
-        .slice(0, 5); // Top 5 colores
-
-    // 3. Salud del Armario (Ratio Tops vs Bottoms)
+    const sortedColors = Object.entries(colorCounts).sort(([,a], [,b]) => b - a).slice(0, 5);
     const topsCount = clothes.filter(c => c.category === 'top').length;
     const bottomsCount = clothes.filter(c => c.category === 'bottom').length;
     
-    // Si tienes 10 tops, idealmente tendrías ~5 bottoms. 
-    // Ratio saludable: entre 1.5 y 2.5 tops por cada bottom.
     const ratio = bottomsCount > 0 ? topsCount / bottomsCount : 0;
     let healthMessage = "Armario Equilibrado ✅";
     let healthColor = "#4CAF50";
@@ -288,7 +279,6 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
 
     return (
         <div className="fade-in">
-            {/* Resumen General */}
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', marginBottom:'20px'}}>
                 <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'20px', textAlign:'center'}}>
                     <div style={{fontSize:'2.5rem', fontWeight:'900'}}>{clothes.length}</div>
@@ -300,7 +290,6 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
                 </div>
             </div>
 
-            {/* Análisis de Estilo */}
             <div style={{marginBottom:'30px'}}>
                 <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
                     <TrendingUp size={20}/> Estilo Dominante
@@ -310,7 +299,6 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
                         const count = styleCounts[style.value] || 0;
                         const percent = (count / clothes.length) * 100;
                         if(percent === 0) return null;
-                        // Colores hardcodeados para la barra
                         const barColor = style.value === 'sport' ? '#FF6B6B' : style.value === 'casual' ? '#4ECDC4' : style.value === 'elegant' ? '#45B7D1' : '#96CEB4';
                         return <div key={style.value} style={{width: `${percent}%`, background: barColor}} title={style.label}></div>
                     })}
@@ -330,7 +318,6 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
                 </div>
             </div>
 
-            {/* Paleta de Colores */}
             <div>
                 <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}>
                     <Palette size={20}/> Tu Paleta Top 5
@@ -343,17 +330,12 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
                         </div>
                     ))}
                 </div>
-                {sortedColors.length > 0 && sortedColors[0][0] === '#000000' && (
-                    <p style={{marginTop:'15px', fontSize:'0.8rem', color:'#888', fontStyle:'italic', textAlign:'center'}}>
-                        "El negro nunca falla, pero ¡prueba algo de color!" 😉
-                    </p>
-                )}
             </div>
         </div>
     );
 }
 
-// --- OTRAS VISTAS (Actualizadas con usuario) ---
+// --- CALENDARIO 📅 ---
 function CalendarView({currentUser}: {currentUser: string}) {
     const [weekStart, setWeekStart] = useState(new Date());
     const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
@@ -466,6 +448,7 @@ function CalendarView({currentUser}: {currentUser: string}) {
     );
 }
 
+// --- VISTAS EXISTENTES ---
 function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -610,7 +593,6 @@ function FavoritesView({currentUser}: {currentUser: string}) {
 
 function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loading: boolean, currentUser: string }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    
     const handleSavePrenda = async (file: File, data: any) => {
         try {
             const compressedFile = await compressImage(file);
@@ -620,7 +602,6 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
             await addDoc(collection(db, 'clothes'), { ...data, image: url, owner: currentUser, createdAt: serverTimestamp() });
         } catch (error) { console.error(error); alert("Error al guardar"); }
     };
-
     const handleDelete = async (id: string) => { if(confirm("¿Borrar?")) await deleteDoc(doc(db, 'clothes', id)); };
 
     return (
