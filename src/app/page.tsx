@@ -195,7 +195,10 @@ function ArmarioContent() {
     // 2. Cargar Calendario (Centralizado aquí para evitar errores en Stats y Calendar)
     const qPlan = query(collection(db, 'planning'));
     const unsubscribePlan = onSnapshot(qPlan, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
+        const data = snapshot.docs.map(doc => {
+            const d = doc.data();
+            return { id: doc.id, ...d } as PlannedDay;
+        });
         setPlannedDays(data.filter(p => !p.owner || p.owner === currentUser));
     });
 
