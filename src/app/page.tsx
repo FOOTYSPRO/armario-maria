@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart, Gem } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -44,6 +44,8 @@ const COLOR_REFERENCES = [
     {value: 'purple', label: 'Morado', hex: '#800080', rgb: [128,0,128], group: 'cool'},
     {value: 'yellow', label: 'Amarillo', hex: '#FFFF00', rgb: [255,255,0], group: 'warm'},
     {value: 'orange', label: 'Naranja', hex: '#FFA500', rgb: [255,165,0], group: 'warm'},
+    {value: 'gold', label: 'Dorado', hex: '#FFD700', rgb: [255,215,0], group: 'warm'},
+    {value: 'silver', label: 'Plateado', hex: '#C0C0C0', rgb: [192,192,192], group: 'cool'},
 ];
 
 interface ColorInfo { name: string; hex: string; }
@@ -54,7 +56,7 @@ interface Prenda {
   name: string; 
   brand?: string;
   price?: number;
-  category: 'top' | 'bottom' | 'shoes' | 'body';
+  category: 'top' | 'bottom' | 'shoes' | 'body' | 'accessories'; // AÑADIDO accessories
   subCategory: string;
   estilos: Estilo[]; 
   primaryColor: ColorInfo;
@@ -93,11 +95,18 @@ interface Trip {
     createdAt: any;
 }
 
+// --- ACTUALIZADO CON ACCESORIOS ---
 const SUB_CATEGORIES = {
     top: ['Camiseta', 'Camisa', 'Sudadera', 'Chaqueta', 'Abrigo', 'Top', 'Blusa', 'Jersey'],
     bottom: ['Pantalón', 'Jeans', 'Falda', 'Shorts', 'Leggins'],
     body: ['Vestido', 'Mono', 'Peto', 'Traje'],
-    shoes: ['Deportivas', 'Botas', 'Zapatos', 'Sandalias', 'Tacones', 'Mocasines']
+    shoes: ['Deportivas', 'Botas', 'Zapatos', 'Sandalias', 'Tacones', 'Mocasines'],
+    accessories: [
+        'Bolso', 'Cinturón', 'Gafas', 
+        'Pendientes', 'Collar', 'Anillo', 'Pulsera', // Joyería
+        'Gorro', 'Guantes', 'Bufanda', 
+        'Charm' // Charm solicitado
+    ]
 };
 
 const STYLES: {value: Estilo, label: string}[] = [
@@ -998,7 +1007,7 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
     );
 }
 
-// --- MODAL CORREGIDO Y ROBUSTO ---
+// --- MODAL ACTUALIZADO ---
 function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { initialData?: Prenda | null, onClose: any, onSave: any, isWishlistDefault?: boolean }) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
@@ -1009,7 +1018,8 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
     const [name, setName] = useState(initialData?.name || '');
     const [brand, setBrand] = useState(initialData?.brand || '');
     const [price, setPrice] = useState(initialData?.price?.toString() || '');
-    const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'body'>(initialData?.category || 'top');
+    // ACTUALIZADO: type para accessories
+    const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'body' | 'accessories'>(initialData?.category || 'top');
     const [subCategory, setSubCategory] = useState(initialData?.subCategory || '');
     
     const [selectedStyles, setSelectedStyles] = useState<Estilo[]>(initialData?.estilos || ['casual']);
@@ -1059,7 +1069,6 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
         if (!urlInput) return; 
         setLoadingUrl(true);
         try {
-            // Intentamos fetch directo, si falla (CORS), usamos la URL tal cual
             const res = await fetch(urlInput);
             if (!res.ok) throw new Error("Posible bloqueo CORS");
             const blob = await res.blob();
@@ -1167,15 +1176,18 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
                 )}
 
                 <SectionLabel icon={<Layers size={14}/>} label="TIPO" />
-                <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
+                
+                {/* BOTONES DE CATEGORÍA ACTUALIZADOS CON ACCESORIOS */}
+                <div style={{display:'flex', gap:'5px', marginBottom:'15px', flexWrap:'wrap'}}>
                     <CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} />
                     <CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} />
                     <CategoryBtn label="Cuerpo" active={category==='body'} onClick={()=>{setCategory('body'); setSubCategory('')}} />
                     <CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} />
+                    <CategoryBtn label="Accesorios" active={category==='accessories'} onClick={()=>{setCategory('accessories'); setSubCategory('')}} />
                 </div>
                 
                 <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', padding:'5px', marginBottom:'15px', border: !subCategory ? '1px dashed red' : '1px solid transparent', borderRadius:'8px'}}>
-                    {SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}
+                    {SUB_CATEGORIES[category] ? SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />) : null}
                 </div>
                 {!subCategory && <div style={{fontSize:'0.7rem', color:'red', marginTop:'-10px', marginBottom:'10px'}}>* Selecciona una opción</div>}
                 
@@ -1230,6 +1242,6 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
 
 function Badge({text, color='#eef', textColor='#444'}:any) { return <span style={{fontSize:'0.85rem', background:color, padding:'4px 8px', borderRadius:'6px', fontWeight:'600', color:textColor}}>{text}</span> }
 function SectionLabel({icon, label}:any) { return <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', fontWeight:'700', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>{icon} {label}</div> }
-function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer'}}>{label}</button> }
+function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer', minWidth:'70px'}}>{label}</button> }
 function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 14px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
 function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', minWidth: '70px' }}>{icon} {label}</button>; }
