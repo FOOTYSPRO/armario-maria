@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, UserCheck } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -16,32 +16,29 @@ const USERS = ['Maria', 'Jorge', 'Marta'];
 type Estilo = 'sport' | 'casual' | 'elegant' | 'party';
 
 const COLOR_REFERENCES = [
-    {value: 'black', label: 'Negro', hex: '#000000', rgb: [0,0,0], group: 'neutral'},
-    {value: 'white', label: 'Blanco', hex: '#ffffff', rgb: [255,255,255], group: 'neutral'},
-    {value: 'gray', label: 'Gris', hex: '#808080', rgb: [128,128,128], group: 'neutral'},
-    {value: 'beige', label: 'Beige', hex: '#F5F5DC', rgb: [245,245,220], group: 'neutral'},
-    {value: 'camel', label: 'Camel', hex: '#C19A6B', rgb: [193,154,107], group: 'neutral'},
-    {value: 'brown', label: 'Marrón', hex: '#8B4513', rgb: [139,69,19], group: 'neutral'},
-    {value: 'navy', label: 'Azul Marino', hex: '#000080', rgb: [0,0,128], group: 'neutral'},
-    {value: 'blue', label: 'Azul Real', hex: '#0000FF', rgb: [0,0,255], group: 'cool'},
-    {value: 'sky', label: 'Celeste', hex: '#87CEEB', rgb: [135,206,235], group: 'cool'},
-    {value: 'teal', label: 'Verde Azulado', hex: '#008080', rgb: [0,128,128], group: 'cool'},
-    {value: 'denim', label: 'Jeans', hex: '#3b5998', rgb: [59,89,152], group: 'neutral'},
-    {value: 'green', label: 'Verde', hex: '#008000', rgb: [0,128,0], group: 'cool'},
-    {value: 'olive', label: 'Oliva', hex: '#808000', rgb: [128,128,0], group: 'earth'},
-    {value: 'red', label: 'Rojo', hex: '#FF0000', rgb: [255,0,0], group: 'warm'},
-    {value: 'maroon', label: 'Granate', hex: '#800000', rgb: [128,0,0], group: 'warm'},
-    {value: 'pink', label: 'Rosa', hex: '#FFC0CB', rgb: [255,192,203], group: 'warm'},
-    {value: 'fuchsia', label: 'Fucsia', hex: '#FF00FF', rgb: [255,0,255], group: 'warm'},
-    {value: 'purple', label: 'Morado', hex: '#800080', rgb: [128,0,128], group: 'cool'},
-    {value: 'yellow', label: 'Amarillo', hex: '#FFFF00', rgb: [255,255,0], group: 'warm'},
-    {value: 'orange', label: 'Naranja', hex: '#FFA500', rgb: [255,165,0], group: 'warm'},
+    {value: 'black', label: 'Negro', hex: '#000000'},
+    {value: 'white', label: 'Blanco', hex: '#ffffff'},
+    {value: 'gray', label: 'Gris', hex: '#808080'},
+    {value: 'beige', label: 'Beige', hex: '#F5F5DC'},
+    {value: 'camel', label: 'Camel', hex: '#C19A6B'},
+    {value: 'brown', label: 'Marrón', hex: '#8B4513'},
+    {value: 'navy', label: 'Azul Marino', hex: '#000080'},
+    {value: 'blue', label: 'Azul Real', hex: '#0000FF'},
+    {value: 'sky', label: 'Celeste', hex: '#87CEEB'},
+    {value: 'teal', label: 'Verde Azulado', hex: '#008080'},
+    {value: 'denim', label: 'Jeans', hex: '#3b5998'},
+    {value: 'green', label: 'Verde', hex: '#008000'},
+    {value: 'olive', label: 'Oliva', hex: '#808000'},
+    {value: 'red', label: 'Rojo', hex: '#FF0000'},
+    {value: 'maroon', label: 'Granate', hex: '#800000'},
+    {value: 'pink', label: 'Rosa', hex: '#FFC0CB'},
+    {value: 'fuchsia', label: 'Fucsia', hex: '#FF00FF'},
+    {value: 'purple', label: 'Morado', hex: '#800080'},
+    {value: 'yellow', label: 'Amarillo', hex: '#FFFF00'},
+    {value: 'orange', label: 'Naranja', hex: '#FFA500'},
 ];
 
-interface ColorInfo {
-    name: string;
-    hex: string;
-}
+interface ColorInfo { name: string; hex: string; }
 
 interface Prenda { 
   id: string; 
@@ -49,7 +46,7 @@ interface Prenda {
   name: string; 
   brand?: string;
   price?: number;
-  category: 'top' | 'bottom' | 'shoes'; 
+  category: 'top' | 'bottom' | 'shoes' | 'body'; // AÑADIDO 'body' para vestidos
   subCategory: string;
   estilos: Estilo[]; 
   primaryColor: ColorInfo;
@@ -62,10 +59,12 @@ interface Prenda {
 interface Outfit {
     id?: string;
     owner?: string;
-    top: Prenda | null;
-    bottom: Prenda | null;
+    type: '2-piece' | '1-piece'; // Nuevo campo para saber si es vestido
+    top?: Prenda | null;
+    bottom?: Prenda | null;
+    body?: Prenda | null; // El vestido va aquí
     shoes: Prenda | null;
-    matchScore: number;
+    matchScore?: number;
     date?: any;
 }
 
@@ -86,7 +85,8 @@ interface Trip {
 
 const SUB_CATEGORIES = {
     top: ['Camiseta', 'Camisa', 'Sudadera', 'Chaqueta', 'Abrigo', 'Top', 'Blusa', 'Jersey'],
-    bottom: ['Pantalón', 'Jeans', 'Falda', 'Shorts', 'Leggins', 'Vestido'],
+    bottom: ['Pantalón', 'Jeans', 'Falda', 'Shorts', 'Leggins'],
+    body: ['Vestido', 'Mono', 'Peto', 'Traje'], // NUEVA CATEGORÍA
     shoes: ['Deportivas', 'Botas', 'Zapatos', 'Sandalias', 'Tacones', 'Mocasines']
 };
 
@@ -102,7 +102,6 @@ const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = URL.createObjectURL(file);
-        img.crossOrigin = "Anonymous";
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -131,7 +130,14 @@ const findClosestColorName = (r: number, g: number, b: number) => {
     let minDistance = Infinity;
     let closest = COLOR_REFERENCES[0];
     COLOR_REFERENCES.forEach(c => {
-        const dist = Math.sqrt(Math.pow(c.rgb[0]-r,2) + Math.pow(c.rgb[1]-g,2) + Math.pow(c.rgb[2]-b,2));
+        const rgb = c.rgb || [0,0,0]; // Fallback por si acaso
+        // Calculamos rgb aproximado desde hex si no está explícito en la constante simplificada
+        if(!c.rgb) {
+             const h = hexToRgb(c.hex);
+             rgb[0]=h[0]; rgb[1]=h[1]; rgb[2]=h[2];
+        }
+        
+        const dist = Math.sqrt(Math.pow(rgb[0]-r,2) + Math.pow(rgb[1]-g,2) + Math.pow(rgb[2]-b,2));
         if (dist < minDistance) { minDistance = dist; closest = c; }
     });
     return closest;
@@ -193,7 +199,7 @@ function ArmarioContent() {
     switch(activeTab) {
         case 'outfit': return <OutfitView clothes={clothes} weather={weather} currentUser={currentUser} />;
         case 'armario': return <ArmarioView clothes={clothes} loading={loading} currentUser={currentUser} />;
-        case 'favoritos': return <FavoritesView currentUser={currentUser} />;
+        case 'favoritos': return <FavoritesView clothes={clothes} currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} />;
         case 'stats': return <StatsView clothes={clothes} />;
         case 'maleta': return <TripView clothes={clothes} currentUser={currentUser} />;
@@ -268,13 +274,13 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
     const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.primaryColor.hex; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
     const sortedColors = Object.entries(colorCounts).sort(([,a], [,b]) => b - a).slice(0, 5);
     
-    const topsCount = clothes.filter(c => c.category === 'top').length;
-    const bottomsCount = clothes.filter(c => c.category === 'bottom').length;
-    const ratio = bottomsCount > 0 ? topsCount / bottomsCount : 0;
+    // Contamos bodies como tops y bottoms para la ratio
+    const bodiesCount = clothes.filter(c => c.category === 'body').length;
+    const topsCount = clothes.filter(c => c.category === 'top').length + bodiesCount;
+    const bottomsCount = clothes.filter(c => c.category === 'bottom').length + bodiesCount;
     
     let healthMessage = "Armario Equilibrado ✅"; let healthColor = "#4CAF50";
     if (bottomsCount === 0 && topsCount > 0) { healthMessage = "¡Faltan Pantalones! ⚠️"; healthColor = "#FF5722"; }
-    else if (ratio > 4) { healthMessage = "Demasiados Tops 👕"; healthColor = "#FF9800"; }
 
     if (clothes.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
 
@@ -349,7 +355,8 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
         const tripItems = clothes.filter(c => selectedTrip.items.includes(c.id));
         const tops = tripItems.filter(c => c.category === 'top').length;
         const bottoms = tripItems.filter(c => c.category === 'bottom').length;
-        const possibleOutfits = tops * bottoms;
+        const bodies = tripItems.filter(c => c.category === 'body').length;
+        const shoes = tripItems.filter(c => c.category === 'shoes').length;
 
         return (
             <div className="fade-in">
@@ -359,7 +366,11 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
                 </div>
                 <div style={{background:'#111', color:'white', padding:'20px', borderRadius:'16px', marginBottom:'20px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                     <div><div style={{fontSize:'2rem', fontWeight:'900', lineHeight:'1'}}>{tripItems.length}</div><div style={{fontSize:'0.8rem', opacity:0.8}}>Prendas</div></div>
-                    <div style={{textAlign:'right'}}><div style={{fontSize:'2rem', fontWeight:'900', lineHeight:'1'}}>~{possibleOutfits}</div><div style={{fontSize:'0.8rem', opacity:0.8}}>Combinaciones</div></div>
+                    <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:'0.9rem', fontWeight:'500', opacity:0.8}}>
+                            {tops} Tops · {bottoms} Bajos · {bodies} Cuerpo · {shoes} Calzado
+                        </div>
+                    </div>
                 </div>
                 <h3 style={{fontSize:'1rem', fontWeight:'700', marginBottom:'10px'}}>¿Qué te llevas?</h3>
                 <div style={{display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px'}}>
@@ -487,8 +498,14 @@ function CalendarView({currentUser}: {currentUser: string}) {
                             </div>
                             {plan ? (
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
-                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.top!.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/></div>
-                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                    {plan.outfit.type === '1-piece' ? (
+                                        <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', gridColumn: 'span 2'}}><Image src={plan.outfit.body!.image} alt="body" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                    ) : (
+                                        <>
+                                            <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.top!.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                            <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}><Image src={plan.outfit.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'2px'}}/></div>
+                                        </>
+                                    )}
                                     <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{plan.outfit.shoes ? <Image src={plan.outfit.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'2px'}}/> : <Footprints size={16} color="#ccc"/>}</div>
                                 </div>
                             ) : (
@@ -506,9 +523,19 @@ function CalendarView({currentUser}: {currentUser: string}) {
                             <div style={{display:'grid', gap:'10px'}}>
                                 {favorites.map(fav => (
                                     <div key={fav.id} onClick={() => confirmPlan(fav)} style={{border:'1px solid #eee', borderRadius:'12px', padding:'10px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
-                                        <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain'}}/></div>
-                                        <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain'}}/></div>
-                                        <div style={{flex:1}}><p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>{fav.top!.estilos.join('/')} / {fav.bottom!.estilos.join('/')}</p></div>
+                                        {fav.type === '1-piece' ? (
+                                            <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.body!.image} alt="body" fill style={{objectFit:'contain'}}/></div>
+                                        ) : (
+                                            <>
+                                                <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain'}}/></div>
+                                                <div style={{width:'40px', height:'40px', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain'}}/></div>
+                                            </>
+                                        )}
+                                        <div style={{flex:1}}>
+                                            <p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>
+                                                {fav.type === '1-piece' ? fav.body!.estilos.join('/') : `${fav.top!.estilos.join('/')} / ${fav.bottom!.estilos.join('/')}`}
+                                            </p>
+                                        </div>
                                         <Check size={16} />
                                     </div>
                                 ))}
@@ -527,8 +554,6 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     const [isAnimating, setIsAnimating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState('');
-    
-    // ESTADO PARA EL FILTRO DE ESTILO
     const [filterStyle, setFilterStyle] = useState<Estilo | 'all'>('all');
 
     const generateSmartOutfit = () => {
@@ -536,70 +561,58 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
         
         const cleanClothes = clothes.filter(c => !c.dirty);
         
-        // 1. Filtrar primero por el estilo seleccionado por el usuario (si hay)
         let tops = cleanClothes.filter(c => c.category === 'top');
         let bottoms = cleanClothes.filter(c => c.category === 'bottom');
+        let bodies = cleanClothes.filter(c => c.category === 'body'); // Vestidos
         let shoes = cleanClothes.filter(c => c.category === 'shoes');
 
         if (filterStyle !== 'all') {
             tops = tops.filter(c => c.estilos.includes(filterStyle));
             bottoms = bottoms.filter(c => c.estilos.includes(filterStyle));
-            // Los zapatos somos un poco más flexibles, pero intentamos que encajen
-            const matchingShoes = shoes.filter(c => c.estilos.includes(filterStyle));
-            if (matchingShoes.length > 0) shoes = matchingShoes;
+            bodies = bodies.filter(c => c.estilos.includes(filterStyle));
+            shoes = shoes.filter(c => c.estilos.includes(filterStyle));
         }
         
-        if (tops.length === 0 || bottoms.length === 0) { 
-            const dirtyTops = clothes.filter(c => c.category === 'top' && c.dirty).length;
-            if (filterStyle !== 'all') {
-                alert(`No tienes ropa limpia de estilo "${filterStyle}" para combinar.`);
-            } else if (dirtyTops > 0 && tops.length === 0) {
-                alert("¡No tienes camisetas limpias! Toca poner lavadora 🧺");
-            } else {
-                alert("¡Falta ropa! Sube partes de arriba y abajo."); 
-            }
-            setIsAnimating(false); return; 
+        // Decisión: ¿2 piezas o 1 pieza?
+        // Si hay filtro, vemos qué tenemos. Si no, 30% chance de vestido.
+        let mode: '2-piece' | '1-piece' = '2-piece';
+        
+        if (bodies.length > 0 && (tops.length === 0 || bottoms.length === 0)) {
+            mode = '1-piece'; // Forzamos vestido si no hay otra cosa
+        } else if (bodies.length > 0 && Math.random() > 0.7) {
+            mode = '1-piece'; // Azar
+        }
+
+        if (mode === '2-piece' && (tops.length === 0 || bottoms.length === 0)) {
+             alert(filterStyle !== 'all' ? `No hay look ${filterStyle} disponible.` : "Falta ropa limpia.");
+             setIsAnimating(false); return;
         }
 
         setTimeout(() => {
-            let availableTops = tops; let tempWarning = '';
-            
-            // 2. Filtro por clima
-            if (weather) {
-                if (weather.temp < 15) {
-                    const winterTops = tops.filter(t => ['Sudadera', 'Chaqueta', 'Abrigo', 'Jersey'].includes(t.subCategory));
-                    if (winterTops.length > 0) { availableTops = winterTops; tempWarning = '❄️ Modo Invierno.'; }
-                } else if (weather.temp > 25) {
-                    const summerTops = tops.filter(t => ['Camiseta', 'Top', 'Camisa', 'Blusa'].includes(t.subCategory));
-                    if (summerTops.length > 0) { availableTops = summerTops; tempWarning = '☀️ Modo Verano.'; }
-                }
-            }
+            let selectedShoes = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
+            let tempWarning = '';
 
-            // Si al filtrar por clima nos quedamos sin nada, volvemos a usar todos los tops del estilo seleccionado
-            if (availableTops.length === 0) availableTops = tops;
+            if (mode === '1-piece') {
+                // LÓGICA VESTIDO
+                const selectedBody = bodies[Math.floor(Math.random() * bodies.length)];
+                setOutfit({ type: '1-piece', body: selectedBody, shoes: selectedShoes, matchScore: 95 });
+                setMessage(`Look de una pieza: ${selectedBody.estilos[0]}`);
 
-            const selectedTop = availableTops[Math.floor(Math.random() * availableTops.length)];
-            
-            // 3. Matching
-            let compatibleBottoms = bottoms.filter(b => {
-                const sharedStyles = b.estilos.filter(style => selectedTop.estilos.includes(style));
-                return sharedStyles.length > 0;
-            });
-
-            if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
-            
-            const selectedBottom = compatibleBottoms[Math.floor(Math.random() * compatibleBottoms.length)];
-            const selectedShoes = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
-            
-            setOutfit({ top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
-            
-            if (tempWarning) setMessage(tempWarning);
-            else if (filterStyle !== 'all') {
-                setMessage(`Look ${filterStyle} listo para hoy.`);
             } else {
+                // LÓGICA 2 PIEZAS (Igual que antes)
+                const selectedTop = tops[Math.floor(Math.random() * tops.length)];
+                let compatibleBottoms = bottoms.filter(b => {
+                    const sharedStyles = b.estilos.filter(style => selectedTop.estilos.includes(style));
+                    return sharedStyles.length > 0;
+                });
+                if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
+                const selectedBottom = compatibleBottoms[Math.floor(Math.random() * compatibleBottoms.length)];
+                
+                setOutfit({ type: '2-piece', top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
+                
                 const commonStyles = selectedTop.estilos.filter(s => selectedBottom.estilos.includes(s));
                 if (commonStyles.length > 0) setMessage(`Un look ${commonStyles[0]} ideal.`);
-                else setMessage(`Mix & Match: Experimentando.`);
+                else setMessage(`Mix & Match.`);
             }
             setIsAnimating(false);
         }, 600);
@@ -607,12 +620,13 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
 
     const saveToFavorites = async () => {
         if (!outfit) return; setIsSaving(true);
-        try { await addDoc(collection(db, 'favorites'), { ...outfit, owner: currentUser, createdAt: serverTimestamp() }); alert("¡Guardado en Favoritos! ❤️"); } catch (e) { console.error(e); alert("Error al guardar"); }
+        try { await addDoc(collection(db, 'favorites'), { ...outfit, owner: currentUser, createdAt: serverTimestamp() }); alert("¡Guardado! ❤️"); } catch (e) { console.error(e); }
         setIsSaving(false);
     }
 
     return (
         <div className="fade-in">
+            {/* Clima UI (Igual) */}
             <div style={{ background: '#111', color: 'white', padding: '30px', borderRadius: '24px', marginBottom: '30px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
                 {weather ? (
                     <>
@@ -623,15 +637,9 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                         <div style={{ fontSize: '4rem', fontWeight: '900', lineHeight: '0.9', marginBottom: '10px' }}>{weather.temp}°</div>
                         <p style={{ fontSize: '1.1rem', fontWeight: '500', color: '#ccc' }}>{weather.temp < 15 ? '¡Hora de abrigarse!' : weather.temp < 25 ? 'Temperatura agradable' : '¡Qué calor!'}</p>
                     </>
-                ) : (
-                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                        <div style={{width:'20px', height:'20px', border:'2px solid white', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 1s linear infinite'}}></div>
-                        <span>Detectando clima...</span>
-                    </div>
-                )}
+                ) : ( <div style={{display:'flex', alignItems:'center', gap:'10px'}}>Detectando clima...</div> )}
             </div>
             
-            {/* SELECTOR DE ESTILO */}
             <div style={{marginBottom:'20px'}}>
                 <div style={{fontSize:'0.8rem', fontWeight:'700', color:'#666', marginBottom:'10px', textAlign:'center', textTransform:'uppercase', letterSpacing:'1px'}}>¿Qué te apetece hoy?</div>
                 <div style={{display:'flex', justifyContent:'center', gap:'8px', flexWrap:'wrap'}}>
@@ -646,15 +654,26 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
                     <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}><Heart size={24} fill={isSaving ? "none" : "#e0245e"} /></button>
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
+                    
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
-                        <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
-                            <Image src={outfit.top!.image} alt="top" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                            <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
-                                <Badge text={outfit.top!.subCategory} />
-                                {outfit.top!.brand && <Badge text={outfit.top!.brand} color="#111" textColor="white" />}
-                            </div>
-                        </div>
-                        <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}><Image src={outfit.bottom!.image} alt="bottom" fill style={{ objectFit: 'contain', padding:'10px' }} /></div>
+                        {outfit.type === '1-piece' ? (
+                             <div style={{ gridColumn: '1 / -1', aspectRatio: '3/4', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
+                                <Image src={outfit.body!.image} alt="body" fill style={{ objectFit: 'contain', padding:'10px' }} />
+                                <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
+                                    <Badge text={outfit.body!.subCategory} />
+                                </div>
+                             </div>
+                        ) : (
+                            <>
+                                <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
+                                    <Image src={outfit.top!.image} alt="top" fill style={{ objectFit: 'contain', padding:'10px' }} />
+                                    <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
+                                        <Badge text={outfit.top!.subCategory} />
+                                    </div>
+                                </div>
+                                <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}><Image src={outfit.bottom!.image} alt="bottom" fill style={{ objectFit: 'contain', padding:'10px' }} /></div>
+                            </>
+                        )}
                         <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc' }}>{outfit.shoes ? <Image src={outfit.shoes.image} alt="shoes" fill style={{ objectFit: 'contain', padding:'10px' }} /> : <Footprints size={40} />}</div>
                     </div>
                 </div>
@@ -670,9 +689,98 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     );
 }
 
-function FavoritesView({currentUser}: {currentUser: string}) {
+// --- NUEVO: CREADOR MANUAL DE OUTFITS ---
+function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], onSave: (o: Outfit) => void, onClose: () => void }) {
+    const [mode, setMode] = useState<'2-piece' | '1-piece'>('2-piece');
+    const [top, setTop] = useState<Prenda | null>(null);
+    const [bottom, setBottom] = useState<Prenda | null>(null);
+    const [body, setBody] = useState<Prenda | null>(null);
+    const [shoes, setShoes] = useState<Prenda | null>(null);
+    
+    // Estado para el selector (drawer)
+    const [selectingFor, setSelectingFor] = useState<'top' | 'bottom' | 'body' | 'shoes' | null>(null);
+
+    const handleSelect = (p: Prenda) => {
+        if (selectingFor === 'top') setTop(p);
+        if (selectingFor === 'bottom') setBottom(p);
+        if (selectingFor === 'body') setBody(p);
+        if (selectingFor === 'shoes') setShoes(p);
+        setSelectingFor(null);
+    }
+
+    const handleSave = () => {
+        if (mode === '2-piece' && top && bottom && shoes) {
+            onSave({ type: '2-piece', top, bottom, shoes, matchScore: 100 });
+        } else if (mode === '1-piece' && body && shoes) {
+            onSave({ type: '1-piece', body, shoes, matchScore: 100 });
+        }
+    }
+
+    const isReady = mode === '2-piece' ? (top && bottom && shoes) : (body && shoes);
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content" style={{height: '90vh', display:'flex', flexDirection:'column'}}>
+                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
+                    <h3 style={{margin:0}}>Crear Outfit</h3>
+                    <button onClick={onClose}><X/></button>
+                </div>
+
+                <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
+                    <button onClick={()=>setMode('2-piece')} style={{flex:1, padding:'10px', border: mode==='2-piece'?'2px solid #111':'1px solid #eee', borderRadius:'10px', fontWeight:'600'}}>2 Piezas</button>
+                    <button onClick={()=>setMode('1-piece')} style={{flex:1, padding:'10px', border: mode==='1-piece'?'2px solid #111':'1px solid #eee', borderRadius:'10px', fontWeight:'600'}}>1 Pieza</button>
+                </div>
+
+                <div style={{flex:1, display:'flex', flexDirection:'column', gap:'15px', overflowY:'auto'}}>
+                    {mode === '2-piece' ? (
+                        <>
+                            <SelectionSlot label="Parte de Arriba" item={top} onClick={() => setSelectingFor('top')} />
+                            <SelectionSlot label="Parte de Abajo" item={bottom} onClick={() => setSelectingFor('bottom')} />
+                        </>
+                    ) : (
+                        <SelectionSlot label="Cuerpo (Vestido/Mono)" item={body} onClick={() => setSelectingFor('body')} />
+                    )}
+                    <SelectionSlot label="Calzado" item={shoes} onClick={() => setSelectingFor('shoes')} />
+                </div>
+
+                <button disabled={!isReady} onClick={handleSave} style={{marginTop:'20px', width:'100%', padding:'15px', background: isReady?'#111':'#ccc', color:'white', borderRadius:'15px', border:'none', fontWeight:'700', fontSize:'1rem'}}>Guardar Outfit</button>
+
+                {selectingFor && (
+                    <div style={{position:'absolute', inset:0, background:'white', zIndex:20, display:'flex', flexDirection:'column'}}>
+                        <div style={{padding:'15px', borderBottom:'1px solid #eee', display:'flex', alignItems:'center', gap:'10px'}}>
+                            <button onClick={()=>setSelectingFor(null)}><ChevronLeft/></button>
+                            <h4 style={{margin:0}}>Elige {selectingFor}</h4>
+                        </div>
+                        <div style={{flex:1, overflowY:'auto', padding:'15px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+                            {clothes.filter(c => c.category === selectingFor).map(c => (
+                                <div key={c.id} onClick={() => handleSelect(c)} style={{cursor:'pointer'}}>
+                                    <div style={{aspectRatio:'3/4', position:'relative', borderRadius:'10px', overflow:'hidden'}}><Image src={c.image} alt="img" fill style={{objectFit:'cover'}}/></div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function SelectionSlot({ label, item, onClick }: any) {
+    return (
+        <div onClick={onClick} style={{border:'2px dashed #ddd', borderRadius:'15px', padding:'5px', minHeight:'100px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', position:'relative', overflow:'hidden'}}>
+            {item ? (
+                <Image src={item.image} alt="selected" fill style={{objectFit:'contain', padding:'5px'}} />
+            ) : (
+                <div style={{color:'#999', fontSize:'0.9rem', fontWeight:'600'}}>{label}</div>
+            )}
+        </div>
+    )
+}
+
+function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUser: string }) {
     const [favorites, setFavorites] = useState<Outfit[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isManualOpen, setIsManualOpen] = useState(false); // NUEVO ESTADO
 
     useEffect(() => {
         const q = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
@@ -684,11 +792,23 @@ function FavoritesView({currentUser}: {currentUser: string}) {
         return () => unsubscribe();
     }, [currentUser]);
 
+    const handleSaveManual = async (outfit: Outfit) => {
+        try {
+            await addDoc(collection(db, 'favorites'), { ...outfit, owner: currentUser, createdAt: serverTimestamp() });
+            setIsManualOpen(false);
+        } catch (e) { alert("Error"); }
+    }
+
     const deleteFav = async (id: string) => { if(confirm("¿Olvidar este look?")) await deleteDoc(doc(db, 'favorites', id)); }
     if(loading) return <p>Cargando favoritos...</p>;
 
     return (
         <div className="fade-in">
+            {/* BOTÓN CREAR MANUAL */}
+            <button onClick={() => setIsManualOpen(true)} style={{width:'100%', padding:'15px', background:'#f0f0f0', border:'2px dashed #ccc', borderRadius:'15px', marginBottom:'20px', fontWeight:'700', color:'#444', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', cursor:'pointer'}}>
+                <Plus size={20}/> Crear mi propio Outfit
+            </button>
+
             {favorites.length === 0 ? (
                  <div style={{textAlign:'center', padding:'40px 20px', color:'#999'}}><Heart size={40} style={{marginBottom:'10px', opacity:0.3}} /><p>Todavía no has guardado ningún look.</p></div>
             ) : (
@@ -696,15 +816,26 @@ function FavoritesView({currentUser}: {currentUser: string}) {
                     {favorites.map(fav => (
                         <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative'}}>
                             <button onClick={() => deleteFav(fav.id!)} style={{position:'absolute', top:'10px', right:'10px', zIndex:5, background:'white', border:'1px solid #eee', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14} color="#999"/></button>
+                            
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
-                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.top!.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/></div>
-                                <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.bottom!.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/></div>
+                                {fav.type === '1-piece' ? (
+                                    <div style={{gridColumn: 'span 2', aspectRatio:'2/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
+                                        <Image src={fav.body?.image || ''} alt="body" fill style={{objectFit:'contain', padding:'5px'}}/>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.top?.image || ''} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/></div>
+                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.bottom?.image || ''} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/></div>
+                                    </>
+                                )}
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}</div>
                             </div>
                         </div>
                     ))}
                 </div>
             )}
+            
+            {isManualOpen && <ManualOutfitCreator clothes={clothes} onSave={handleSaveManual} onClose={() => setIsManualOpen(false)} />}
         </div>
     )
 }
@@ -736,9 +867,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
 
     const handleSavePrenda = async (data: any, file?: File) => {
         try {
-            // Limpiamos los datos antes de enviarlos a Firebase para que no haya 'undefined' sueltos
             const { id, ...dataToSave } = data;
-            
             let imageUrl = dataToSave.image;
             if (file) {
                 const compressedFile = await compressImage(file);
@@ -746,11 +875,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                 await uploadBytes(storageRef, compressedFile);
                 imageUrl = await getDownloadURL(storageRef);
             }
-            
-            // Asignamos la imagen (nueva o vieja)
             dataToSave.image = imageUrl;
-
-            // Si hay un ID, actualizamos. Si no, creamos.
             if (id) {
                 const docRef = doc(db, 'clothes', id);
                 await updateDoc(docRef, dataToSave);
@@ -763,10 +888,7 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
                 });
             }
             setEditingPrenda(null); 
-        } catch (error) { 
-            console.error("ERROR REAL:", error); 
-            alert("Error al guardar: " + (error as any).message); 
-        }
+        } catch (error) { console.error("ERROR REAL:", error); alert("Error al guardar: " + (error as any).message); }
     };
 
     const handleDelete = async (id: string) => { if(confirm("¿Borrar?")) await deleteDoc(doc(db, 'clothes', id)); };
@@ -865,7 +987,7 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
     const [name, setName] = useState(initialData?.name || '');
     const [brand, setBrand] = useState(initialData?.brand || '');
     const [price, setPrice] = useState(initialData?.price?.toString() || '');
-    const [category, setCategory] = useState<'top' | 'bottom' | 'shoes'>(initialData?.category || 'top');
+    const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'body'>(initialData?.category || 'top');
     const [subCategory, setSubCategory] = useState(initialData?.subCategory || '');
     
     const [selectedStyles, setSelectedStyles] = useState<Estilo[]>(initialData?.estilos || ['casual']);
@@ -1001,7 +1123,12 @@ function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | 
                 )}
 
                 <SectionLabel icon={<Layers size={14}/>} label="TIPO" />
-                <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}><CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} /><CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} /><CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} /></div>
+                <div style={{display:'flex', gap:'5px', marginBottom:'15px'}}>
+                    <CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} />
+                    <CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} />
+                    <CategoryBtn label="Cuerpo" active={category==='body'} onClick={()=>{setCategory('body'); setSubCategory('')}} />
+                    <CategoryBtn label="Pies" active={category==='shoes'} onClick={()=>{setCategory('shoes'); setSubCategory('')}} />
+                </div>
                 <div className="no-scrollbar" style={{display:'flex', gap:'5px', overflowX:'auto', paddingBottom:'5px', marginBottom:'15px'}}>{SUB_CATEGORIES[category].map((sub) => <Chip key={sub} label={sub} active={subCategory === sub} onClick={() => setSubCategory(sub)} />)}</div>
                 
                 <SectionLabel icon={<Tag size={14}/>} label="ESTILOS (Elige varios)" />
