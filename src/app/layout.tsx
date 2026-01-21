@@ -14,8 +14,9 @@ export const metadata: Metadata = {
     title: "Armario",
   },
   icons: {
-    icon: "/icon.png",        // Icono para la pestaña del navegador
-    apple: "/icon.png",       // Icono para el iPhone
+    icon: "/icon.png",        // Pestañas
+    apple: "/icon.png",       // iPhone / iPad
+    shortcut: "/icon.png",    // Accesos directos de Windows/Android
   },
 };
 
