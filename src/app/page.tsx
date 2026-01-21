@@ -102,7 +102,7 @@ const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
         const img = new window.Image();
         img.src = URL.createObjectURL(file);
-        // Quitamos el crossOrigin ya que no usamos IA interna
+        img.crossOrigin = "Anonymous";
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -260,7 +260,6 @@ function StatsView({ clothes }: { clothes: Prenda[] }) {
     const brandCounts = clothes.reduce((acc, curr) => { const b = curr.brand || 'Sin Marca'; acc[b] = (acc[b] || 0) + 1; return acc; }, {} as Record<string, number>);
     const topBrand = Object.entries(brandCounts).sort(([,a], [,b]) => b - a)[0];
 
-    // Ahora estilos es un array, contamos cada ocurrencia
     const styleCounts = clothes.reduce((acc, curr) => { 
         curr.estilos.forEach(s => { acc[s] = (acc[s] || 0) + 1; });
         return acc; 
@@ -737,28 +736,37 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
 
     const handleSavePrenda = async (data: any, file?: File) => {
         try {
-            let imageUrl = data.image;
+            // Limpiamos los datos antes de enviarlos a Firebase para que no haya 'undefined' sueltos
+            const { id, ...dataToSave } = data;
+            
+            let imageUrl = dataToSave.image;
             if (file) {
                 const compressedFile = await compressImage(file);
                 const storageRef = ref(storage, `armario/${Date.now()}-${compressedFile.name}`);
                 await uploadBytes(storageRef, compressedFile);
                 imageUrl = await getDownloadURL(storageRef);
             }
+            
+            // Asignamos la imagen (nueva o vieja)
+            dataToSave.image = imageUrl;
 
-            if (data.id) {
-                const docRef = doc(db, 'clothes', data.id);
-                await updateDoc(docRef, { ...data, image: imageUrl });
+            // Si hay un ID, actualizamos. Si no, creamos.
+            if (id) {
+                const docRef = doc(db, 'clothes', id);
+                await updateDoc(docRef, dataToSave);
             } else {
                 await addDoc(collection(db, 'clothes'), { 
-                    ...data, 
-                    image: imageUrl, 
+                    ...dataToSave, 
                     owner: currentUser, 
                     dirty: false, 
                     createdAt: serverTimestamp() 
                 });
             }
             setEditingPrenda(null); 
-        } catch (error) { console.error(error); alert("Error al guardar"); }
+        } catch (error) { 
+            console.error("ERROR REAL:", error); 
+            alert("Error al guardar: " + (error as any).message); 
+        }
     };
 
     const handleDelete = async (id: string) => { if(confirm("¿Borrar?")) await deleteDoc(doc(db, 'clothes', id)); };
@@ -845,13 +853,15 @@ function ArmarioView({ clothes, loading, currentUser }: { clothes: Prenda[], loa
     );
 }
 
-// --- MODAL ---
 function UploadModal({ initialData, onClose, onSave }: { initialData?: Prenda | null, onClose: any, onSave: any }) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
     const [urlInput, setUrlInput] = useState('');
     const [loadingUrl, setLoadingUrl] = useState(false);
     
+    // SIN IA
+    const [isProcessingBg, setIsProcessingBg] = useState(false); 
+
     const [name, setName] = useState(initialData?.name || '');
     const [brand, setBrand] = useState(initialData?.brand || '');
     const [price, setPrice] = useState(initialData?.price?.toString() || '');
