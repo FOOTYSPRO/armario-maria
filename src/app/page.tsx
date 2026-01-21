@@ -59,8 +59,8 @@ interface Prenda {
   estilos: Estilo[]; 
   primaryColor: ColorInfo;
   secondaryColors?: ColorInfo[];
-  seasons: Season[]; // NUEVO: Temporadas
-  isWishlist: boolean; // NUEVO: Wishlist flag
+  seasons: Season[];
+  isWishlist: boolean;
   image: string; 
   dirty?: boolean;
   createdAt?: any;
@@ -69,7 +69,7 @@ interface Prenda {
 interface Outfit {
     id?: string;
     owner?: string;
-    type: '2-piece' | '1-piece';
+    type?: '2-piece' | '1-piece'; // Opcional para soportar datos viejos
     top?: Prenda | null;
     bottom?: Prenda | null;
     body?: Prenda | null;
@@ -161,19 +161,19 @@ function ArmarioContent() {
   const [currentUser, setCurrentUser] = useState<string>('Maria');
   const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'wishlist' | 'favoritos' | 'calendario' | 'stats' | 'maleta'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
-  const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]); // Elevamos el estado para Stats
+  const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
   useEffect(() => {
-    // 1. Cargar Ropa
+    // 1. Cargar Ropa (Blindamos los datos para evitar errores de estructura antigua)
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribeClothes = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
             const d = doc.data();
             const primaryColor = d.primaryColor || { name: d.colorName || 'black', hex: d.colorHex || '#000000' };
             const estilos = d.estilos || (d.estilo ? [d.estilo] : ['casual']);
-            const seasons = d.seasons || ['primavera', 'verano', 'otono', 'invierno']; // Default to all if missing
+            const seasons = d.seasons || ['primavera', 'verano', 'otono', 'invierno'];
             
             return { 
                 id: doc.id, ...d, 
@@ -192,7 +192,7 @@ function ArmarioContent() {
         setLoading(false);
     });
 
-    // 2. Cargar Calendario (para Stats de coste por uso)
+    // 2. Cargar Calendario (Centralizado aquí para evitar errores en Stats y Calendar)
     const qPlan = query(collection(db, 'planning'));
     const unsubscribePlan = onSnapshot(qPlan, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as PlannedDay[];
@@ -220,7 +220,9 @@ function ArmarioContent() {
         case 'armario': return <ArmarioView clothes={clothes.filter(c => !c.isWishlist)} loading={loading} currentUser={currentUser} isWishlistMode={false} />;
         case 'wishlist': return <ArmarioView clothes={clothes.filter(c => c.isWishlist)} loading={loading} currentUser={currentUser} isWishlistMode={true} />;
         case 'favoritos': return <FavoritesView clothes={clothes} currentUser={currentUser} />;
+        // FIX: Pasamos plannedDays a CalendarView
         case 'calendario': return <CalendarView currentUser={currentUser} plannedDays={plannedDays} />;
+        // FIX: Pasamos plannedDays a StatsView
         case 'stats': return <StatsView clothes={clothes.filter(c => !c.isWishlist)} plannedDays={plannedDays} />;
         case 'maleta': return <TripView clothes={clothes} currentUser={currentUser} />;
     }
@@ -280,7 +282,7 @@ function ArmarioContent() {
   );
 }
 
-// --- VISTA ESTADÍSTICAS & DINERO (MEJORADA CON COSTE POR USO) ---
+// --- VISTA ESTADÍSTICAS (BLINDADA) ---
 function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: PlannedDay[] }) {
     const cleanClothes = clothes.filter(c => !c.dirty);
     const dirtyClothes = clothes.filter(c => c.dirty);
@@ -288,26 +290,28 @@ function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: P
     const totalValue = clothes.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
     const brandCounts = clothes.reduce((acc, curr) => { const b = curr.brand || 'Sin Marca'; acc[b] = (acc[b] || 0) + 1; return acc; }, {} as Record<string, number>);
     const topBrand = Object.entries(brandCounts).sort(([,a], [,b]) => b - a)[0];
-    const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.primaryColor.hex; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
+    const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.primaryColor?.hex || '#000000'; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
     const sortedColors = Object.entries(colorCounts).sort(([,a], [,b]) => b - a).slice(0, 5);
 
-    // CÁLCULO DE COSTE POR USO
+    // CÁLCULO DE COSTE POR USO (DEFENSIVO)
     const usageMap = new Map<string, number>();
-    plannedDays.forEach(day => {
-        if(day.outfit.top) usageMap.set(day.outfit.top.id, (usageMap.get(day.outfit.top.id) || 0) + 1);
-        if(day.outfit.bottom) usageMap.set(day.outfit.bottom.id, (usageMap.get(day.outfit.bottom.id) || 0) + 1);
-        if(day.outfit.body) usageMap.set(day.outfit.body.id, (usageMap.get(day.outfit.body.id) || 0) + 1);
-        if(day.outfit.shoes) usageMap.set(day.outfit.shoes.id, (usageMap.get(day.outfit.shoes.id) || 0) + 1);
+    // plannedDays puede ser undefined si la carga es lenta, añadimos check
+    (plannedDays || []).forEach(day => {
+        if(day.outfit?.top?.id) usageMap.set(day.outfit.top.id, (usageMap.get(day.outfit.top.id) || 0) + 1);
+        if(day.outfit?.bottom?.id) usageMap.set(day.outfit.bottom.id, (usageMap.get(day.outfit.bottom.id) || 0) + 1);
+        if(day.outfit?.body?.id) usageMap.set(day.outfit.body.id, (usageMap.get(day.outfit.body.id) || 0) + 1);
+        if(day.outfit?.shoes?.id) usageMap.set(day.outfit.shoes.id, (usageMap.get(day.outfit.shoes.id) || 0) + 1);
     });
 
     const clothesWithCost = clothes.map(c => {
         const uses = usageMap.get(c.id) || 0;
-        const costPerWear = c.price ? (c.price / (uses + 1)) : 0; // +1 para evitar infinito
+        const costPerWear = c.price ? (c.price / (uses + 1)) : 0; 
         return { ...c, uses, costPerWear };
-    }).sort((a,b) => b.costPerWear - a.costPerWear); // Ordenar por más caros de amortizar
+    }).sort((a,b) => b.costPerWear - a.costPerWear);
 
     const bestAmortized = [...clothesWithCost].reverse().slice(0, 3).filter(c => c.price && c.price > 0);
-    const worstAmortized = clothesWithCost.slice(0, 3).filter(c => c.price && c.price > 0 && c.uses < 3);
+    
+    if (clothes.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
 
     return (
         <div className="fade-in">
@@ -338,13 +342,8 @@ function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: P
                      </div>
                 </div>
             )}
-
-            <div style={{background:'#eef', padding:'15px 20px', borderRadius:'16px', marginBottom:'20px', display:'flex', alignItems:'center', gap:'15px'}}>
-                <div style={{background:'white', padding:'10px', borderRadius:'50%'}}><Droplets size={20} color="#2196F3"/></div>
-                <div><div style={{fontWeight:'700', fontSize:'0.9rem'}}>Estado Limpieza</div><div style={{fontSize:'0.8rem', color:'#666'}}>{dirtyClothes.length} sucias / {cleanClothes.length} limpias</div></div>
-            </div>
-
-            <div>
+            
+             <div style={{marginBottom:'30px'}}>
                 <h3 style={{display:'flex', alignItems:'center', gap:'10px', fontSize:'1.1rem', fontWeight:'800', marginBottom:'15px'}}><Palette size={20}/> Tu Paleta Top 5</h3>
                 <div style={{display:'flex', gap:'15px'}}>
                     {sortedColors.map(([hex, count]) => (
@@ -359,7 +358,7 @@ function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: P
     );
 }
 
-// --- VISTA OUTFIT MEJORADA CON TEMPORADA ---
+// --- VISTA OUTFIT ---
 function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weather: any, currentUser: string }) {
     const [outfit, setOutfit] = useState<Outfit | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -370,28 +369,18 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     const generateSmartOutfit = () => {
         setIsAnimating(true); setMessage('');
         
-        // FILTRO 1: SOLO ROPA LIMPIA Y QUE NO SEA WISHLIST
         const cleanClothes = clothes.filter(c => !c.dirty && !c.isWishlist);
         
-        // FILTRO 2: TEMPORADA (Según temperatura)
-        let seasonFilter: Season[] = ['primavera', 'verano', 'otono', 'invierno']; // Por defecto todo
+        let seasonFilter: Season[] = ['primavera', 'verano', 'otono', 'invierno'];
         let tempWarning = '';
         
         if (weather) {
-            if (weather.temp < 12) {
-                seasonFilter = ['invierno', 'otono'];
-                tempWarning = '❄️ Hace frío. Buscando abrigo.';
-            } else if (weather.temp < 20) {
-                seasonFilter = ['primavera', 'otono'];
-                tempWarning = '☁️ Tiempo fresco.';
-            } else if (weather.temp >= 20) {
-                seasonFilter = ['verano', 'primavera'];
-                tempWarning = '☀️ Hace bueno.';
-            }
+            if (weather.temp < 12) { seasonFilter = ['invierno', 'otono']; tempWarning = '❄️ Hace frío. Buscando abrigo.'; } 
+            else if (weather.temp < 20) { seasonFilter = ['primavera', 'otono']; tempWarning = '☁️ Tiempo fresco.'; } 
+            else if (weather.temp >= 20) { seasonFilter = ['verano', 'primavera']; tempWarning = '☀️ Hace bueno.'; }
         }
 
-        const seasonalClothes = cleanClothes.filter(c => c.seasons.some(s => seasonFilter.includes(s)));
-        // Si nos quedamos sin ropa por el filtro de clima, usamos todo lo limpio como fallback
+        const seasonalClothes = cleanClothes.filter(c => c.seasons?.some(s => seasonFilter.includes(s)));
         const pool = seasonalClothes.length > 5 ? seasonalClothes : cleanClothes;
 
         let tops = pool.filter(c => c.category === 'top');
@@ -399,21 +388,19 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
         let bodies = pool.filter(c => c.category === 'body'); 
         let shoes = pool.filter(c => c.category === 'shoes');
 
-        // FILTRO 3: ESTILO (Usuario)
         if (filterStyle !== 'all') {
-            tops = tops.filter(c => c.estilos.includes(filterStyle));
-            bottoms = bottoms.filter(c => c.estilos.includes(filterStyle));
-            bodies = bodies.filter(c => c.estilos.includes(filterStyle));
-            shoes = shoes.filter(c => c.estilos.includes(filterStyle));
+            tops = tops.filter(c => c.estilos?.includes(filterStyle));
+            bottoms = bottoms.filter(c => c.estilos?.includes(filterStyle));
+            bodies = bodies.filter(c => c.estilos?.includes(filterStyle));
+            shoes = shoes.filter(c => c.estilos?.includes(filterStyle));
         }
         
-        // DECISIÓN: ¿2 PIEZAS O 1 PIEZA?
         let mode: '2-piece' | '1-piece' = '2-piece';
         if (bodies.length > 0 && (tops.length === 0 || bottoms.length === 0)) mode = '1-piece';
         else if (bodies.length > 0 && Math.random() > 0.7) mode = '1-piece';
 
         if (mode === '2-piece' && (tops.length === 0 || bottoms.length === 0)) {
-             alert(filterStyle !== 'all' ? `No hay look ${filterStyle} disponible.` : "Falta ropa limpia para este clima.");
+             alert("Falta ropa limpia para este clima o estilo.");
              setIsAnimating(false); return;
         }
 
@@ -426,18 +413,11 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 setMessage(tempWarning || `Look de una pieza: ${selectedBody.estilos[0]}`);
             } else {
                 const selectedTop = tops[Math.floor(Math.random() * tops.length)];
-                let compatibleBottoms = bottoms.filter(b => {
-                    const sharedStyles = b.estilos.filter(style => selectedTop.estilos.includes(style));
-                    return sharedStyles.length > 0;
-                });
+                let compatibleBottoms = bottoms.filter(b => b.estilos?.some(style => selectedTop.estilos?.includes(style)));
                 if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
                 const selectedBottom = compatibleBottoms[Math.floor(Math.random() * compatibleBottoms.length)];
-                
                 setOutfit({ type: '2-piece', top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
-                
-                const commonStyles = selectedTop.estilos.filter(s => selectedBottom.estilos.includes(s));
-                if (commonStyles.length > 0) setMessage(tempWarning || `Un look ${commonStyles[0]} ideal.`);
-                else setMessage(tempWarning || `Mix & Match.`);
+                setMessage(tempWarning || `Look listo.`);
             }
             setIsAnimating(false);
         }, 600);
@@ -478,21 +458,16 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
                     <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}><Heart size={24} fill={isSaving ? "none" : "#e0245e"} /></button>
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
+                    
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         {outfit.type === '1-piece' ? (
                              <div style={{ gridColumn: '1 / -1', aspectRatio: '3/4', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
                                 <Image src={outfit.body!.image} alt="body" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                                <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
-                                    <Badge text={outfit.body!.subCategory} />
-                                </div>
                              </div>
                         ) : (
                             <>
                                 <div style={{ gridColumn: '1 / -1', aspectRatio: '16/9', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
                                     <Image src={outfit.top!.image} alt="top" fill style={{ objectFit: 'contain', padding:'10px' }} />
-                                    <div style={{position:'absolute', bottom:'10px', left:'10px', display:'flex', gap:'5px'}}>
-                                        <Badge text={outfit.top!.subCategory} />
-                                    </div>
                                 </div>
                                 <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}><Image src={outfit.bottom!.image} alt="bottom" fill style={{ objectFit: 'contain', padding:'10px' }} /></div>
                             </>
@@ -508,6 +483,236 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                 </button>
                 <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
             </div>
+        </div>
+    );
+}
+
+// --- VISTA MALETA 🧳 (BLINDADA) ---
+function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: string }) {
+    const [trips, setTrips] = useState<Trip[]>([]);
+    const [isCreating, setIsCreating] = useState(false);
+    const [newTripName, setNewTripName] = useState('');
+    const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+
+    useEffect(() => {
+        const q = query(collection(db, 'trips'), orderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Trip[];
+            setTrips(data.filter(t => !t.owner || t.owner === currentUser));
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const createTrip = async () => {
+        if (!newTripName) return;
+        await addDoc(collection(db, 'trips'), { name: newTripName, items: [], owner: currentUser, createdAt: serverTimestamp() });
+        setNewTripName(''); setIsCreating(false);
+    };
+
+    const deleteTrip = async (id: string) => { if(confirm("¿Borrar maleta?")) await deleteDoc(doc(db, 'trips', id)); setSelectedTrip(null); };
+
+    const toggleItemInTrip = async (tripId: string, itemId: string, isAdded: boolean) => {
+        const tripRef = doc(db, 'trips', tripId);
+        if (isAdded) await updateDoc(tripRef, { items: arrayRemove(itemId) });
+        else await updateDoc(tripRef, { items: arrayUnion(itemId) });
+    };
+
+    if (selectedTrip) {
+        // BLINDAJE: Filtramos solo si existe el array de items en la maleta
+        const tripItems = clothes.filter(c => selectedTrip.items?.includes(c.id));
+        const tops = tripItems.filter(c => c.category === 'top').length;
+        const bottoms = tripItems.filter(c => c.category === 'bottom').length;
+        const bodies = tripItems.filter(c => c.category === 'body').length;
+        const shoes = tripItems.filter(c => c.category === 'shoes').length;
+
+        return (
+            <div className="fade-in">
+                <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
+                    <button onClick={() => setSelectedTrip(null)} style={{background:'#f0f0f0', border:'none', borderRadius:'50%', width:'35px', height:'35px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}><ChevronLeft/></button>
+                    <h2 style={{fontSize:'1.5rem', fontWeight:'800', margin:0}}>{selectedTrip.name}</h2>
+                </div>
+                <div style={{background:'#111', color:'white', padding:'20px', borderRadius:'16px', marginBottom:'20px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <div><div style={{fontSize:'2rem', fontWeight:'900', lineHeight:'1'}}>{tripItems.length}</div><div style={{fontSize:'0.8rem', opacity:0.8}}>Prendas</div></div>
+                    <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:'0.8rem', opacity:0.8}}>{tops} Tops · {bottoms} Bajos</div>
+                        <div style={{fontSize:'0.8rem', opacity:0.8}}>{bodies} Cuerpo · {shoes} Calzado</div>
+                    </div>
+                </div>
+                <h3 style={{fontSize:'1rem', fontWeight:'700', marginBottom:'10px'}}>¿Qué te llevas?</h3>
+                <div style={{display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px'}}>
+                    {clothes.map(prenda => {
+                        const isSelected = selectedTrip.items?.includes(prenda.id);
+                        // BLINDAJE DE IMAGEN
+                        if (!prenda.image) return null;
+                        
+                        return (
+                            <div key={prenda.id} onClick={() => toggleItemInTrip(selectedTrip.id, prenda.id, isSelected)} style={{position:'relative', opacity: isSelected ? 1 : 0.6, transform: isSelected ? 'scale(1)' : 'scale(0.95)', transition:'all 0.2s', cursor:'pointer'}}>
+                                <div style={{aspectRatio:'3/4', background:'#f9f9f9', borderRadius:'12px', overflow:'hidden', position:'relative', border: isSelected ? '3px solid #111' : '1px solid #eee'}}>
+                                    <Image src={prenda.image} alt={prenda.name} fill style={{objectFit:'cover'}} />
+                                    {isSelected && <div style={{position:'absolute', top:'5px', right:'5px', background:'#111', color:'white', borderRadius:'50%', padding:'2px'}}><Check size={12}/></div>}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fade-in">
+            {isCreating ? (
+                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'16px', marginBottom:'20px'}}>
+                    <h3 style={{marginTop:0}}>Nueva Maleta</h3>
+                    <input type="text" placeholder="Ej: Fin de semana rural" value={newTripName} onChange={e => setNewTripName(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #ddd', marginBottom:'10px'}} />
+                    <div style={{display:'flex', gap:'10px'}}>
+                        <button onClick={createTrip} style={{flex:1, background:'#111', color:'white', border:'none', padding:'10px', borderRadius:'10px', fontWeight:'700'}}>Crear</button>
+                        <button onClick={() => setIsCreating(false)} style={{flex:1, background:'transparent', color:'#666', border:'1px solid #ddd', padding:'10px', borderRadius:'10px'}}>Cancelar</button>
+                    </div>
+                </div>
+            ) : (
+                <button onClick={() => setIsCreating(true)} style={{width:'100%', padding:'15px', background:'#f9f9f9', border:'2px dashed #ddd', borderRadius:'16px', color:'#666', fontWeight:'600', marginBottom:'20px', cursor:'pointer'}}>+ Crear nuevo viaje</button>
+            )}
+            <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
+                {trips.map(trip => (
+                    <div key={trip.id} onClick={() => setSelectedTrip(trip)} style={{background:'white', border:'1px solid #eee', borderRadius:'16px', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.02)'}}>
+                        <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
+                            <div style={{background:'#eef', padding:'10px', borderRadius:'12px'}}><Briefcase size={20} color="#333"/></div>
+                            <div><div style={{fontWeight:'700', fontSize:'1rem'}}>{trip.name}</div><div style={{fontSize:'0.8rem', color:'#888'}}>{trip.items?.length || 0} prendas</div></div>
+                        </div>
+                        <div style={{display:'flex', alignItems:'center', gap:'10px'}}><button onClick={(e) => {e.stopPropagation(); deleteTrip(trip.id)}} style={{background:'none', border:'none', color:'#faa', cursor:'pointer'}}><Trash2 size={16}/></button><ArrowRight size={16} color="#ccc"/></div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// --- CALENDARIO 📅 (BLINDADO) ---
+function CalendarView({currentUser, plannedDays}: {currentUser: string, plannedDays: PlannedDay[]}) {
+    const [weekStart, setWeekStart] = useState(new Date());
+    const [selectedDateForAdd, setSelectedDateForAdd] = useState<string | null>(null);
+    const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+    const [favorites, setFavorites] = useState<Outfit[]>([]);
+
+    useEffect(() => {
+        const qFav = query(collection(db, 'favorites'), orderBy('createdAt', 'desc'));
+        getDocs(qFav).then(snap => {
+            const favData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Outfit[];
+            setFavorites(favData.filter(f => !f.owner || f.owner === currentUser));
+        });
+    }, [currentUser]);
+
+    const getDaysOfWeek = (start: Date) => {
+        const days = [];
+        const day = start.getDay();
+        const diff = start.getDate() - day + (day === 0 ? -6 : 1); 
+        const monday = new Date(start.setDate(diff));
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday); d.setDate(monday.getDate() + i); days.push(d);
+        }
+        return days;
+    };
+
+    const days = getDaysOfWeek(new Date(weekStart));
+    const formatDateKey = (date: Date) => date.toISOString().split('T')[0];
+
+    const handleAddClick = (dateStr: string) => { setSelectedDateForAdd(dateStr); setIsSelectorOpen(true); };
+
+    const confirmPlan = async (outfit: Outfit) => {
+        if (!selectedDateForAdd) return;
+        const existing = (plannedDays || []).find(p => p.date === selectedDateForAdd);
+        if (existing) await deleteDoc(doc(db, 'planning', existing.id));
+        await addDoc(collection(db, 'planning'), { date: selectedDateForAdd, outfit: outfit, owner: currentUser, createdAt: serverTimestamp() });
+        setIsSelectorOpen(false); setSelectedDateForAdd(null);
+    };
+
+    const deletePlan = async (id: string) => { if(confirm("¿Quitar outfit de este día?")) await deleteDoc(doc(db, 'planning', id)); };
+    const changeWeek = (offset: number) => {
+        const newDate = new Date(weekStart); newDate.setDate(newDate.getDate() + (offset * 7)); setWeekStart(newDate);
+    };
+
+    return (
+        <div className="fade-in">
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronLeft size={24}/></button>
+                <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>{weekStart.toLocaleString('es-ES', { month: 'long' })} {weekStart.getFullYear()}</h3>
+                <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronRight size={24}/></button>
+            </div>
+            <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
+                {days.map((day) => {
+                    const dateKey = formatDateKey(day);
+                    const plan = (plannedDays || []).find(p => p.date === dateKey);
+                    const isToday = formatDateKey(new Date()) === dateKey;
+                    
+                    return (
+                        <div key={dateKey} style={{background: isToday ? '#fff' : '#f9f9f9', border: isToday ? '2px solid #111' : '1px solid #eee', borderRadius:'16px', padding:'15px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
+                                <div style={{display:'flex', flexDirection:'column'}}>
+                                    <span style={{fontSize:'0.8rem', color:'#666', textTransform:'uppercase', fontWeight:'600'}}>{day.toLocaleString('es-ES', { weekday: 'long' })}</span>
+                                    <span style={{fontSize:'1.2rem', fontWeight:'800'}}>{day.getDate()}</span>
+                                </div>
+                                {plan ? (
+                                    <button onClick={() => deletePlan(plan.id)} style={{background:'#ffebee', color:'red', border:'none', borderRadius:'50%', width:'30px', height:'30px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14}/></button>
+                                ) : (
+                                    <button onClick={() => handleAddClick(dateKey)} style={{background:'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}><Plus size={14}/> Añadir</button>
+                                )}
+                            </div>
+                            {plan && plan.outfit ? (
+                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
+                                    {/* BLINDAJE: Usamos '?' para acceder a propiedades que podrían no existir en datos viejos */}
+                                    {plan.outfit.type === '1-piece' || (!plan.outfit.top && plan.outfit.body) ? (
+                                        <div style={{aspectRatio:'2/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', gridColumn: 'span 2'}}>
+                                            {plan.outfit.body?.image ? <Image src={plan.outfit.body.image} alt="body" fill style={{objectFit:'contain', padding:'2px'}}/> : null}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}>
+                                                {plan.outfit.top?.image ? <Image src={plan.outfit.top.image} alt="t" fill style={{objectFit:'contain', padding:'2px'}}/> : null}
+                                            </div>
+                                            <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative'}}>
+                                                {plan.outfit.bottom?.image ? <Image src={plan.outfit.bottom.image} alt="b" fill style={{objectFit:'contain', padding:'2px'}}/> : null}
+                                            </div>
+                                        </>
+                                    )}
+                                    <div style={{aspectRatio:'1/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                                        {plan.outfit.shoes?.image ? <Image src={plan.outfit.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'2px'}}/> : <Footprints size={16} color="#ccc"/>}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{height:'60px', border:'2px dashed #e0e0e0', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc', fontSize:'0.8rem'}}>Sin planificar</div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            
+            {/* MODAL SELECCION FAVORITOS */}
+            {isSelectorOpen && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}><h3 style={{margin:0}}>Elige un outfit</h3><button onClick={() => setIsSelectorOpen(false)} style={{background:'none', border:'none'}}><X/></button></div>
+                        {favorites.length === 0 ? <p>No tienes favoritos guardados.</p> : (
+                            <div style={{display:'grid', gap:'10px'}}>
+                                {favorites.map(fav => (
+                                    <div key={fav.id} onClick={() => confirmPlan(fav)} style={{border:'1px solid #eee', borderRadius:'12px', padding:'10px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer'}}>
+                                         {fav.type === '1-piece' ? (
+                                            <div style={{width:'40px', height:'40px', position:'relative'}}>{fav.body?.image && <Image src={fav.body.image} alt="body" fill style={{objectFit:'contain'}}/>}</div>
+                                        ) : (
+                                            <>
+                                                <div style={{width:'40px', height:'40px', position:'relative'}}>{fav.top?.image && <Image src={fav.top.image} alt="t" fill style={{objectFit:'contain'}}/>}</div>
+                                                <div style={{width:'40px', height:'40px', position:'relative'}}>{fav.bottom?.image && <Image src={fav.bottom.image} alt="b" fill style={{objectFit:'contain'}}/>}</div>
+                                            </>
+                                        )}
+                                        <div style={{flex:1}}><p style={{margin:0, fontSize:'0.8rem', fontWeight:'600'}}>Look guardado</p></div>
+                                        <Check size={16} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -644,12 +849,12 @@ function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUse
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
                                 {fav.type === '1-piece' ? (
                                     <div style={{gridColumn: 'span 2', aspectRatio:'2/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
-                                        <Image src={fav.body?.image || ''} alt="body" fill style={{objectFit:'contain', padding:'5px'}}/>
+                                        {fav.body?.image && <Image src={fav.body.image} alt="body" fill style={{objectFit:'contain', padding:'5px'}}/>}
                                     </div>
                                 ) : (
                                     <>
-                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.top?.image || ''} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/></div>
-                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}><Image src={fav.bottom?.image || ''} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/></div>
+                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>{fav.top?.image && <Image src={fav.top.image} alt="t" fill style={{objectFit:'contain', padding:'5px'}}/>}</div>
+                                        <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>{fav.bottom?.image && <Image src={fav.bottom.image} alt="b" fill style={{objectFit:'contain', padding:'5px'}}/>}</div>
                                     </>
                                 )}
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}</div>
@@ -1008,7 +1213,7 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
                 
                 <SectionLabel icon={<ShoppingBag size={14}/>} label="DETALLES (Opcional)" />
                 <div style={{display:'flex', gap:'10px', marginBottom:'15px'}}>
-                    <input type="text" placeholder="Marca" value={brand} onChange={e => setBrand(e.target.value)} style={{flex:1, padding:'12px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9'}} />
+                    <input type="text" placeholder="Marca (ej. Zara)" value={brand} onChange={e => setBrand(e.target.value)} style={{flex:1, padding:'12px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9'}} />
                     <input type="number" placeholder="Precio (€)" value={price} onChange={e => setPrice(e.target.value)} style={{width:'100px', padding:'12px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9'}} />
                 </div>
 
