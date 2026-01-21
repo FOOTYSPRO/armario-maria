@@ -14,7 +14,8 @@ export const metadata: Metadata = {
     title: "Armario",
   },
   icons: {
-    apple: "https://cdn-icons-png.flaticon.com/512/1063/1063196.png",
+    icon: "/icon.png",        // Icono para la pestaña del navegador
+    apple: "/icon.png",       // Icono para el iPhone
   },
 };
 
@@ -22,7 +23,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // Esto hace que se sienta como una App nativa (no se puede hacer zoom pellizcando)
+  userScalable: false,
   themeColor: "#ffffff",
 };
 
