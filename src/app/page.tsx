@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart, Gem, Coins, RotateCcw } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart, Gem, Coins, RotateCcw, Wand2, Watch } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -63,7 +63,7 @@ interface Prenda {
   secondaryColors?: ColorInfo[];
   seasons: Season[];
   isWishlist: boolean;
-  forSale?: boolean; // NUEVO CAMPO: En venta
+  forSale?: boolean; 
   image: string; 
   dirty?: boolean;
   createdAt?: any;
@@ -76,6 +76,8 @@ interface Outfit {
     top?: Prenda | null;
     bottom?: Prenda | null;
     body?: Prenda | null;
+    outerwear?: Prenda | null; // NUEVO: Abrigo/Chaqueta
+    accessories?: Prenda[];    // NUEVO: Array de accesorios
     shoes: Prenda | null;
     matchScore?: number;
     date?: any;
@@ -97,12 +99,17 @@ interface Trip {
 }
 
 const SUB_CATEGORIES = {
-    top: ['Camiseta', 'Camisa', 'Sudadera', 'Chaqueta', 'Abrigo', 'Top', 'Blusa', 'Jersey'],
+    top: ['Camiseta', 'Camisa', 'Sudadera', 'Chaqueta', 'Abrigo', 'Top', 'Blusa', 'Jersey', 'Chaleco'],
     bottom: ['Pantalón', 'Jeans', 'Falda', 'Shorts', 'Leggins'],
     body: ['Vestido', 'Mono', 'Peto', 'Traje'],
     shoes: ['Deportivas', 'Botas', 'Zapatos', 'Sandalias', 'Tacones', 'Mocasines'],
     accessories: ['Bolso', 'Cinturón', 'Gafas', 'Pendientes', 'Collar', 'Anillo', 'Pulsera', 'Gorro', 'Guantes', 'Bufanda', 'Charm']
 };
+
+// Helper para saber si es capa exterior
+const isOuterwear = (subCategory: string) => {
+    return ['Abrigo', 'Chaqueta', 'Gabardina', 'Chaleco', 'Sudadera'].includes(subCategory);
+}
 
 const STYLES: {value: Estilo, label: string}[] = [
     {value: 'sport', label: 'Deporte 🏃'},
@@ -185,7 +192,7 @@ function ArmarioContent() {
                 secondaryColors: d.secondaryColors || [],
                 seasons: seasons,
                 isWishlist: d.isWishlist || false,
-                forSale: d.forSale || false, // Cargamos estado de venta
+                forSale: d.forSale || false, 
                 dirty: d.dirty || false,
                 brand: d.brand || '',
                 price: d.price || 0
@@ -222,10 +229,8 @@ function ArmarioContent() {
   const renderView = () => {
     switch(activeTab) {
         case 'outfit': return <OutfitView clothes={clothes} weather={weather} currentUser={currentUser} />;
-        // FILTRO ARMARIO: Ni wishlist NI en venta
         case 'armario': return <ArmarioView clothes={clothes.filter(c => !c.isWishlist && !c.forSale)} loading={loading} currentUser={currentUser} viewMode='wardrobe' />;
         case 'wishlist': return <ArmarioView clothes={clothes.filter(c => c.isWishlist)} loading={loading} currentUser={currentUser} viewMode='wishlist' />;
-        // NUEVA VISTA VENTAS
         case 'sales': return <ArmarioView clothes={clothes.filter(c => c.forSale)} loading={loading} currentUser={currentUser} viewMode='sales' />;
         case 'favoritos': return <FavoritesView clothes={clothes} currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} plannedDays={plannedDays} />;
@@ -388,26 +393,31 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
         
         let seasonFilter: Season[] = ['primavera', 'verano', 'otono', 'invierno'];
         let tempWarning = '';
+        let needsCoat = false;
         
         if (weather) {
-            if (weather.temp < 12) { seasonFilter = ['invierno', 'otono']; tempWarning = '❄️ Hace frío. Buscando abrigo.'; } 
-            else if (weather.temp < 20) { seasonFilter = ['primavera', 'otono']; tempWarning = '☁️ Tiempo fresco.'; } 
+            if (weather.temp < 12) { seasonFilter = ['invierno', 'otono']; tempWarning = '❄️ Hace frío. Buscando abrigo.'; needsCoat = true; } 
+            else if (weather.temp < 20) { seasonFilter = ['primavera', 'otono']; tempWarning = '☁️ Tiempo fresco.'; needsCoat = Math.random() > 0.5; } 
             else if (weather.temp >= 20) { seasonFilter = ['verano', 'primavera']; tempWarning = '☀️ Hace bueno.'; }
         }
 
         const seasonalClothes = cleanClothes.filter(c => c.seasons?.some(s => seasonFilter.includes(s)));
         const pool = seasonalClothes.length > 5 ? seasonalClothes : cleanClothes;
 
-        let tops = pool.filter(c => c.category === 'top');
+        // SEPARAR TOPS DE ABRIGOS
+        let tops = pool.filter(c => c.category === 'top' && !isOuterwear(c.subCategory));
+        let outerwears = pool.filter(c => c.category === 'top' && isOuterwear(c.subCategory));
         let bottoms = pool.filter(c => c.category === 'bottom');
         let bodies = pool.filter(c => c.category === 'body'); 
         let shoes = pool.filter(c => c.category === 'shoes');
+        let accessories = pool.filter(c => c.category === 'accessories');
 
         if (filterStyle !== 'all') {
             tops = tops.filter(c => c.estilos?.includes(filterStyle));
             bottoms = bottoms.filter(c => c.estilos?.includes(filterStyle));
             bodies = bodies.filter(c => c.estilos?.includes(filterStyle));
             shoes = shoes.filter(c => c.estilos?.includes(filterStyle));
+            outerwears = outerwears.filter(c => c.estilos?.includes(filterStyle));
         }
         
         let mode: '2-piece' | '1-piece' = '2-piece';
@@ -421,17 +431,28 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
 
         setTimeout(() => {
             let selectedShoes = shoes.length > 0 ? shoes[Math.floor(Math.random() * shoes.length)] : null;
+            let selectedOuter = (needsCoat && outerwears.length > 0) ? outerwears[Math.floor(Math.random() * outerwears.length)] : null;
             
+            // Accesorios aleatorios (0 a 2)
+            let selectedAcc = [];
+            if (accessories.length > 0 && Math.random() > 0.3) {
+                selectedAcc.push(accessories[Math.floor(Math.random() * accessories.length)]);
+                if (accessories.length > 1 && Math.random() > 0.6) {
+                     const second = accessories[Math.floor(Math.random() * accessories.length)];
+                     if(second.id !== selectedAcc[0].id) selectedAcc.push(second);
+                }
+            }
+
             if (mode === '1-piece') {
                 const selectedBody = bodies[Math.floor(Math.random() * bodies.length)];
-                setOutfit({ type: '1-piece', body: selectedBody, shoes: selectedShoes, matchScore: 95 });
+                setOutfit({ type: '1-piece', body: selectedBody, shoes: selectedShoes, outerwear: selectedOuter, accessories: selectedAcc, matchScore: 95 });
                 setMessage(tempWarning || `Look de una pieza: ${selectedBody.estilos[0]}`);
             } else {
                 const selectedTop = tops[Math.floor(Math.random() * tops.length)];
                 let compatibleBottoms = bottoms.filter(b => b.estilos?.some(style => selectedTop.estilos?.includes(style)));
                 if (compatibleBottoms.length === 0) compatibleBottoms = bottoms;
                 const selectedBottom = compatibleBottoms[Math.floor(Math.random() * compatibleBottoms.length)];
-                setOutfit({ type: '2-piece', top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, matchScore: 95 });
+                setOutfit({ type: '2-piece', top: selectedTop, bottom: selectedBottom, shoes: selectedShoes, outerwear: selectedOuter, accessories: selectedAcc, matchScore: 95 });
                 setMessage(tempWarning || `Look listo.`);
             }
             setIsAnimating(false);
@@ -475,6 +496,17 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                     <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
+                        
+                        {/* ABRIGO (Si hay) */}
+                        {outfit.outerwear && (
+                            <div style={{ gridColumn: '1 / -1', background: '#eef', borderRadius: '16px', padding: '10px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom:'5px' }}>
+                                <div style={{width:'50px', height:'50px', position:'relative', borderRadius:'8px', overflow:'hidden', background:'white'}}>
+                                    <Image src={outfit.outerwear.image} alt="coat" fill style={{objectFit:'contain'}}/>
+                                </div>
+                                <div style={{fontSize:'0.9rem', fontWeight:'600'}}>+ {outfit.outerwear.name}</div>
+                            </div>
+                        )}
+
                         {outfit.type === '1-piece' ? (
                              <div style={{ gridColumn: '1 / -1', aspectRatio: '3/4', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5' }}>
                                 <Image src={outfit.body!.image} alt="body" fill style={{ objectFit: 'contain', padding:'10px' }} />
@@ -488,6 +520,17 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
                             </>
                         )}
                         <div style={{ aspectRatio: '1/1', position: 'relative', borderRadius: '20px', overflow: 'hidden', background:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', color:'#ccc' }}>{outfit.shoes ? <Image src={outfit.shoes.image} alt="shoes" fill style={{ objectFit: 'contain', padding:'10px' }} /> : <Footprints size={40} />}</div>
+                        
+                        {/* ACCESORIOS */}
+                        {outfit.accessories && outfit.accessories.length > 0 && (
+                            <div style={{gridColumn:'1/-1', display:'flex', gap:'5px', marginTop:'5px', overflowX:'auto'}}>
+                                {outfit.accessories.map((acc, i) => (
+                                    <div key={i} style={{width:'50px', height:'50px', borderRadius:'12px', background:'#f9f9f9', position:'relative', overflow:'hidden', border:'1px solid #eee', flexShrink:0}}>
+                                        <Image src={acc.image} alt="acc" fill style={{objectFit:'contain', padding:'5px'}}/>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -726,13 +769,21 @@ function CalendarView({currentUser, plannedDays}: {currentUser: string, plannedD
     );
 }
 
+// --- CREADOR MANUAL MEJORADO ---
 function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], onSave: (o: Outfit) => void, onClose: () => void }) {
     const [mode, setMode] = useState<'2-piece' | '1-piece'>('2-piece');
+    
+    // Slots principales
     const [top, setTop] = useState<Prenda | null>(null);
     const [bottom, setBottom] = useState<Prenda | null>(null);
     const [body, setBody] = useState<Prenda | null>(null);
     const [shoes, setShoes] = useState<Prenda | null>(null);
-    const [selectingFor, setSelectingFor] = useState<'top' | 'bottom' | 'body' | 'shoes' | null>(null);
+    
+    // Slots añadidos (Capas y Accesorios)
+    const [outerwear, setOuterwear] = useState<Prenda | null>(null);
+    const [accessories, setAccessories] = useState<Prenda[]>([]);
+
+    const [selectingFor, setSelectingFor] = useState<'top' | 'bottom' | 'body' | 'shoes' | 'outerwear' | 'accessories' | null>(null);
 
     // FILTRO MANUAL: No mostrar cosas en venta
     const validClothes = clothes.filter(c => !c.forSale);
@@ -742,18 +793,48 @@ function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], 
         if (selectingFor === 'bottom') setBottom(p);
         if (selectingFor === 'body') setBody(p);
         if (selectingFor === 'shoes') setShoes(p);
+        if (selectingFor === 'outerwear') setOuterwear(p);
+        if (selectingFor === 'accessories') {
+            // Evitar duplicados
+            if (!accessories.some(a => a.id === p.id)) {
+                setAccessories([...accessories, p]);
+            }
+        }
         setSelectingFor(null);
     }
 
+    const removeAccessory = (id: string) => {
+        setAccessories(accessories.filter(a => a.id !== id));
+    }
+
     const handleSave = () => {
+        let outfit: Outfit = { shoes, outerwear, accessories };
+        
         if (mode === '2-piece' && top && bottom && shoes) {
-            onSave({ type: '2-piece', top, bottom, shoes, matchScore: 100 });
+            outfit = { ...outfit, type: '2-piece', top, bottom, matchScore: 100 };
+            onSave(outfit);
         } else if (mode === '1-piece' && body && shoes) {
-            onSave({ type: '1-piece', body, shoes, matchScore: 100 });
+            outfit = { ...outfit, type: '1-piece', body, matchScore: 100 };
+            onSave(outfit);
         }
     }
 
     const isReady = mode === '2-piece' ? (top && bottom && shoes) : (body && shoes);
+
+    // Lógica para filtrar qué ropa mostrar en el selector
+    const getFilteredOptions = () => {
+        if (!selectingFor) return [];
+        
+        return validClothes.filter(c => {
+            if (selectingFor === 'outerwear') {
+                return c.category === 'top' && isOuterwear(c.subCategory);
+            }
+            if (selectingFor === 'top') {
+                return c.category === 'top' && !isOuterwear(c.subCategory);
+            }
+            return c.category === selectingFor;
+        });
+    }
 
     return (
         <div className="modal-overlay">
@@ -762,38 +843,75 @@ function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], 
                     <h3 style={{margin:0}}>Crear Outfit Manual</h3>
                     <button onClick={onClose}><X/></button>
                 </div>
+                
+                {/* SELECTOR MODO */}
                 <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
                     <button onClick={()=>setMode('2-piece')} style={{flex:1, padding:'10px', border: mode==='2-piece'?'2px solid #111':'1px solid #eee', borderRadius:'10px', fontWeight:'600', background: mode==='2-piece'?'#111':'white', color: mode==='2-piece'?'white':'#111'}}>2 Piezas</button>
                     <button onClick={()=>setMode('1-piece')} style={{flex:1, padding:'10px', border: mode==='1-piece'?'2px solid #111':'1px solid #eee', borderRadius:'10px', fontWeight:'600', background: mode==='1-piece'?'#111':'white', color: mode==='1-piece'?'white':'#111'}}>1 Pieza</button>
                 </div>
-                <div style={{flex:1, display:'flex', flexDirection:'column', gap:'15px', overflowY:'auto'}}>
-                    {mode === '2-piece' ? (
-                        <>
-                            <SelectionSlot label="Parte de Arriba" item={top} onClick={() => setSelectingFor('top')} />
-                            <SelectionSlot label="Parte de Abajo" item={bottom} onClick={() => setSelectingFor('bottom')} />
-                        </>
-                    ) : (
-                        <SelectionSlot label="Cuerpo (Vestido/Mono)" item={body} onClick={() => setSelectingFor('body')} />
-                    )}
-                    <SelectionSlot label="Calzado" item={shoes} onClick={() => setSelectingFor('shoes')} />
+
+                <div style={{flex:1, display:'flex', flexDirection:'column', gap:'15px', overflowY:'auto', paddingBottom:'20px'}}>
+                    
+                    {/* CAPA EXTERIOR (Opcional) */}
+                    <div style={{display:'flex', gap:'10px', overflowX:'auto'}} className="no-scrollbar">
+                        <SelectionSlot label="Abrigo / Chaqueta (Opcional)" item={outerwear} onClick={() => setSelectingFor('outerwear')} onRemove={() => setOuterwear(null)} isWide />
+                    </div>
+
+                    {/* CAPA BASE */}
+                    <div style={{display:'flex', gap:'10px'}}>
+                        {mode === '2-piece' ? (
+                            <>
+                                <div style={{flex:1}}><SelectionSlot label="Parte de Arriba (Base)" item={top} onClick={() => setSelectingFor('top')} /></div>
+                                <div style={{flex:1}}><SelectionSlot label="Parte de Abajo" item={bottom} onClick={() => setSelectingFor('bottom')} /></div>
+                            </>
+                        ) : (
+                            <div style={{flex:1}}><SelectionSlot label="Cuerpo (Vestido/Mono)" item={body} onClick={() => setSelectingFor('body')} /></div>
+                        )}
+                    </div>
+
+                    {/* CALZADO */}
+                    <div style={{display:'flex', justifyContent:'center'}}>
+                        <div style={{width:'50%'}}>
+                            <SelectionSlot label="Calzado" item={shoes} onClick={() => setSelectingFor('shoes')} />
+                        </div>
+                    </div>
+
+                    {/* ACCESORIOS */}
+                    <div style={{borderTop:'1px dashed #eee', paddingTop:'15px'}}>
+                        <div style={{fontSize:'0.8rem', fontWeight:'700', marginBottom:'10px', color:'#888'}}>ACCESORIOS</div>
+                        <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>
+                            {accessories.map(acc => (
+                                <div key={acc.id} style={{width:'60px', height:'60px', borderRadius:'10px', overflow:'hidden', position:'relative', border:'1px solid #eee'}}>
+                                    <Image src={acc.image} fill style={{objectFit:'contain'}} alt="acc"/>
+                                    <button onClick={()=>removeAccessory(acc.id)} style={{position:'absolute', top:0, right:0, background:'rgba(0,0,0,0.5)', color:'white', border:'none', width:'20px', height:'20px', display:'flex', alignItems:'center', justifyContent:'center'}}><X size={12}/></button>
+                                </div>
+                            ))}
+                            <button onClick={() => setSelectingFor('accessories')} style={{width:'60px', height:'60px', borderRadius:'10px', border:'1px dashed #ccc', display:'flex', alignItems:'center', justifyContent:'center', color:'#888'}}>
+                                <Plus size={20}/>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
-                <button disabled={!isReady} onClick={handleSave} style={{marginTop:'20px', width:'100%', padding:'15px', background: isReady?'#111':'#ccc', color:'white', borderRadius:'15px', border:'none', fontWeight:'700', fontSize:'1rem'}}>Guardar en Favoritos</button>
+                <button disabled={!isReady} onClick={handleSave} style={{marginTop:'10px', width:'100%', padding:'15px', background: isReady?'#111':'#ccc', color:'white', borderRadius:'15px', border:'none', fontWeight:'700', fontSize:'1rem'}}>Guardar en Favoritos</button>
 
                 {selectingFor && (
                     <div style={{position:'absolute', inset:0, background:'white', zIndex:20, display:'flex', flexDirection:'column'}}>
                         <div style={{padding:'15px', borderBottom:'1px solid #eee', display:'flex', alignItems:'center', gap:'10px'}}>
                             <button onClick={()=>setSelectingFor(null)}><ChevronLeft/></button>
-                            <h4 style={{margin:0}}>Elige {selectingFor}</h4>
+                            <h4 style={{margin:0, textTransform:'capitalize'}}>Elige {selectingFor === 'outerwear' ? 'Capa Exterior' : selectingFor === 'top' ? 'Parte de Arriba' : selectingFor}</h4>
                         </div>
                         <div style={{flex:1, overflowY:'auto', padding:'15px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
-                            {validClothes.filter(c => c.category === selectingFor).map(c => (
+                            {getFilteredOptions().map(c => (
                                 <div key={c.id} onClick={() => handleSelect(c)} style={{cursor:'pointer', position:'relative'}}>
                                     <div style={{aspectRatio:'3/4', position:'relative', borderRadius:'10px', overflow:'hidden', border: c.isWishlist ? '2px solid #fbbf24' : '1px solid #eee'}}>
                                         <Image src={c.image} alt="img" fill style={{objectFit:'cover'}}/>
                                         {c.isWishlist && <div style={{position:'absolute', top:5, right:5, background:'rgba(255,255,255,0.8)', borderRadius:'50%', padding:'2px'}}><Star size={10} color="#fbbf24" fill="#fbbf24"/></div>}
+                                        <div style={{position:'absolute', bottom:0, left:0, right:0, background:'rgba(255,255,255,0.9)', padding:'5px', fontSize:'0.7rem', fontWeight:'600', textAlign:'center'}}>{c.name}</div>
                                     </div>
                                 </div>
                             ))}
+                            {getFilteredOptions().length === 0 && <div style={{gridColumn:'1/-1', textAlign:'center', padding:'20px', color:'#999'}}>No hay prendas de este tipo disponibles.</div>}
                         </div>
                     </div>
                 )}
@@ -802,16 +920,21 @@ function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], 
     )
 }
 
-function SelectionSlot({ label, item, onClick }: any) {
+function SelectionSlot({ label, item, onClick, onRemove, isWide }: any) {
     return (
-        <div onClick={onClick} style={{border:'2px dashed #ddd', borderRadius:'15px', padding:'5px', minHeight:'100px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', position:'relative', overflow:'hidden', background:'#fafafa'}}>
+        <div style={{border:'2px dashed #ddd', borderRadius:'15px', padding:'5px', minHeight: isWide ? '80px' : '120px', width: isWide ? '100%' : 'auto', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', position:'relative', overflow:'hidden', background:'#fafafa'}} onClick={!item ? onClick : undefined}>
             {item ? (
                 <>
                     <Image src={item.image} alt="selected" fill style={{objectFit:'contain', padding:'5px'}} />
-                    {item.isWishlist && <div style={{position:'absolute', top:5, right:5, background:'white', borderRadius:'50%', padding:'4px', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Star size={12} color="#fbbf24" fill="#fbbf24"/></div>}
+                    {onRemove && (
+                        <button onClick={(e) => {e.stopPropagation(); onRemove()}} style={{position:'absolute', top:5, right:5, background:'white', borderRadius:'50%', width:'24px', height:'24px', border:'1px solid #eee', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10}}>
+                            <X size={14} color="#333"/>
+                        </button>
+                    )}
+                    <div style={{position:'absolute', bottom:5, left:5, background:'rgba(255,255,255,0.8)', padding:'2px 6px', borderRadius:'10px', fontSize:'0.7rem', fontWeight:'600'}}>{item.subCategory}</div>
                 </>
             ) : (
-                <div style={{color:'#999', fontSize:'0.9rem', fontWeight:'600'}}>{label}</div>
+                <div style={{color:'#999', fontSize:'0.8rem', fontWeight:'600', textAlign:'center', padding:'10px'}} onClick={onClick}>{label}</div>
             )}
         </div>
     )
@@ -856,6 +979,13 @@ function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUse
                         <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative'}}>
                             <button onClick={() => deleteFav(fav.id!)} style={{position:'absolute', top:'10px', right:'10px', zIndex:5, background:'white', border:'1px solid #eee', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14} color="#999"/></button>
                             
+                            {/* Mostrar Abrigo si tiene */}
+                            {fav.outerwear && (
+                                <div style={{marginBottom:'5px', display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', color:'#666', background:'#f9f9f9', padding:'5px', borderRadius:'8px', width:'fit-content'}}>
+                                    <Layers size={12}/> + {fav.outerwear.name}
+                                </div>
+                            )}
+
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px'}}>
                                 {fav.type === '1-piece' ? (
                                     <div style={{gridColumn: 'span 2', aspectRatio:'2/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative'}}>
@@ -869,6 +999,17 @@ function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUse
                                 )}
                                 <div style={{aspectRatio:'1/1', background:'#f9f9f9', borderRadius:'10px', overflow:'hidden', position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>{fav.shoes ? <Image src={fav.shoes.image} alt="s" fill style={{objectFit:'contain', padding:'5px'}}/> : <Footprints size={20} color="#ccc"/>}</div>
                             </div>
+
+                            {/* Iconos de accesorios pequeños debajo */}
+                            {fav.accessories && fav.accessories.length > 0 && (
+                                <div style={{marginTop:'8px', display:'flex', gap:'5px'}}>
+                                    {fav.accessories.map((acc, i) => (
+                                        <div key={i} style={{width:'30px', height:'30px', borderRadius:'50%', background:'#f0f0f0', overflow:'hidden', position:'relative', border:'1px solid white'}}>
+                                            <Image src={acc.image} fill style={{objectFit:'cover'}} alt="acc"/>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1122,15 +1263,23 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
         if (!urlInput) return; 
         setLoadingUrl(true);
         try {
-            const res = await fetch(urlInput);
-            if (!res.ok) throw new Error("Posible bloqueo CORS");
-            const blob = await res.blob();
-            const fetchedFile = new File([blob], "downloaded.jpg", { type: "image/jpeg" });
-            setFile(fetchedFile);
+            const res = await fetch(`/api/extract?url=${encodeURIComponent(urlInput)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.image) setPreview(data.image);
+                if (data.title) setName(data.title);
+                if (data.price) setPrice(data.price.toString());
+                setFile(null);
+            } else {
+                 // Fallback simple si falla la API
+                const resImg = await fetch(urlInput);
+                const blob = await resImg.blob();
+                const fetchedFile = new File([blob], "downloaded.jpg", { type: "image/jpeg" });
+                setFile(fetchedFile);
+            }
         } catch (e) { 
-            console.log("Usando URL directa por fallo en descarga (CORS):", e);
-            setPreview(urlInput);
-            setFile(null); 
+            console.log("Error extracción, usando valor directo:", e);
+            setPreview(urlInput); // Si todo falla, intentamos usar la URL como imagen directa
         }
         setLoadingUrl(false);
     };
@@ -1225,7 +1374,9 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
                 {mode === 'url' && !file && !initialData && (
                      <div style={{marginBottom:'15px', display:'flex', gap:'5px'}}>
                         <input type="text" placeholder="Pega el enlace..." value={urlInput} onChange={(e)=>setUrlInput(e.target.value)} style={{flex:1, padding:'10px', borderRadius:'8px', border:'1px solid #ddd'}} />
-                        <button onClick={handleUrlFetch} disabled={!urlInput} style={{background:'#111', color:'white', border:'none', borderRadius:'8px', padding:'0 15px'}}>{loadingUrl ? '...' : 'OK'}</button>
+                        <button onClick={handleUrlFetch} disabled={!urlInput} style={{background:'#111', color:'white', border:'none', borderRadius:'8px', padding:'0 15px', display:'flex', alignItems:'center', gap:'5px'}}>
+                            {loadingUrl ? <RefreshCw className="spin" size={14}/> : <Wand2 size={14}/>} Magic Import
+                        </button>
                      </div>
                 )}
 
