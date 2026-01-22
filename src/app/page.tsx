@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import Image from 'next/image';
-import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart, Gem } from 'lucide-react';
+import { CloudSun, Shirt, Sparkles, Camera, Trash2, X, Check, Footprints, Layers, RefreshCw, Palette, Tag, Edit3, Link as LinkIcon, UploadCloud, MapPin, Thermometer, Heart, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, User, LogOut, PieChart, TrendingUp, AlertCircle, Briefcase, Search, ArrowRight, Droplets, Banknote, ShoppingBag, ArrowUpDown, Filter, Star, Snowflake, Sun, CloudRain, ShoppingCart, Gem, Coins, RotateCcw } from 'lucide-react';
 
 // --- FIREBASE ---
 import { db, storage } from '../lib/firebase';
@@ -56,13 +56,14 @@ interface Prenda {
   name: string; 
   brand?: string;
   price?: number;
-  category: 'top' | 'bottom' | 'shoes' | 'body' | 'accessories'; // AÑADIDO accessories
+  category: 'top' | 'bottom' | 'shoes' | 'body' | 'accessories';
   subCategory: string;
   estilos: Estilo[]; 
   primaryColor: ColorInfo;
   secondaryColors?: ColorInfo[];
   seasons: Season[];
   isWishlist: boolean;
+  forSale?: boolean; // NUEVO CAMPO: En venta
   image: string; 
   dirty?: boolean;
   createdAt?: any;
@@ -95,18 +96,12 @@ interface Trip {
     createdAt: any;
 }
 
-// --- ACTUALIZADO CON ACCESORIOS ---
 const SUB_CATEGORIES = {
     top: ['Camiseta', 'Camisa', 'Sudadera', 'Chaqueta', 'Abrigo', 'Top', 'Blusa', 'Jersey'],
     bottom: ['Pantalón', 'Jeans', 'Falda', 'Shorts', 'Leggins'],
     body: ['Vestido', 'Mono', 'Peto', 'Traje'],
     shoes: ['Deportivas', 'Botas', 'Zapatos', 'Sandalias', 'Tacones', 'Mocasines'],
-    accessories: [
-        'Bolso', 'Cinturón', 'Gafas', 
-        'Pendientes', 'Collar', 'Anillo', 'Pulsera', // Joyería
-        'Gorro', 'Guantes', 'Bufanda', 
-        'Charm' // Charm solicitado
-    ]
+    accessories: ['Bolso', 'Cinturón', 'Gafas', 'Pendientes', 'Collar', 'Anillo', 'Pulsera', 'Gorro', 'Guantes', 'Bufanda', 'Charm']
 };
 
 const STYLES: {value: Estilo, label: string}[] = [
@@ -168,14 +163,13 @@ export default function Page() {
 
 function ArmarioContent() {
   const [currentUser, setCurrentUser] = useState<string>('Maria');
-  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'wishlist' | 'favoritos' | 'calendario' | 'stats' | 'maleta'>('outfit');
+  const [activeTab, setActiveTab] = useState<'outfit' | 'armario' | 'wishlist' | 'sales' | 'favoritos' | 'calendario' | 'stats' | 'maleta'>('outfit');
   const [clothes, setClothes] = useState<Prenda[]>([]);
   const [plannedDays, setPlannedDays] = useState<PlannedDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
   useEffect(() => {
-    // 1. Cargar Ropa
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribeClothes = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
@@ -191,6 +185,7 @@ function ArmarioContent() {
                 secondaryColors: d.secondaryColors || [],
                 seasons: seasons,
                 isWishlist: d.isWishlist || false,
+                forSale: d.forSale || false, // Cargamos estado de venta
                 dirty: d.dirty || false,
                 brand: d.brand || '',
                 price: d.price || 0
@@ -201,7 +196,6 @@ function ArmarioContent() {
         setLoading(false);
     });
 
-    // 2. Cargar Calendario
     const qPlan = query(collection(db, 'planning'));
     const unsubscribePlan = onSnapshot(qPlan, (snapshot) => {
         const data = snapshot.docs.map(doc => {
@@ -211,7 +205,6 @@ function ArmarioContent() {
         setPlannedDays(data.filter(p => !p.owner || p.owner === currentUser));
     });
 
-    // 3. Cargar Clima
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -229,12 +222,15 @@ function ArmarioContent() {
   const renderView = () => {
     switch(activeTab) {
         case 'outfit': return <OutfitView clothes={clothes} weather={weather} currentUser={currentUser} />;
-        case 'armario': return <ArmarioView clothes={clothes.filter(c => !c.isWishlist)} loading={loading} currentUser={currentUser} isWishlistMode={false} />;
-        case 'wishlist': return <ArmarioView clothes={clothes.filter(c => c.isWishlist)} loading={loading} currentUser={currentUser} isWishlistMode={true} />;
+        // FILTRO ARMARIO: Ni wishlist NI en venta
+        case 'armario': return <ArmarioView clothes={clothes.filter(c => !c.isWishlist && !c.forSale)} loading={loading} currentUser={currentUser} viewMode='wardrobe' />;
+        case 'wishlist': return <ArmarioView clothes={clothes.filter(c => c.isWishlist)} loading={loading} currentUser={currentUser} viewMode='wishlist' />;
+        // NUEVA VISTA VENTAS
+        case 'sales': return <ArmarioView clothes={clothes.filter(c => c.forSale)} loading={loading} currentUser={currentUser} viewMode='sales' />;
         case 'favoritos': return <FavoritesView clothes={clothes} currentUser={currentUser} />;
         case 'calendario': return <CalendarView currentUser={currentUser} plannedDays={plannedDays} />;
-        case 'stats': return <StatsView clothes={clothes.filter(c => !c.isWishlist)} plannedDays={plannedDays} />;
-        case 'maleta': return <TripView clothes={clothes} currentUser={currentUser} />;
+        case 'stats': return <StatsView clothes={clothes.filter(c => !c.isWishlist && !c.forSale)} plannedDays={plannedDays} sales={clothes.filter(c => c.forSale)} />;
+        case 'maleta': return <TripView clothes={clothes.filter(c => !c.forSale)} currentUser={currentUser} />;
     }
   };
   
@@ -261,6 +257,7 @@ function ArmarioContent() {
                       {activeTab === 'outfit' && '¿Qué nos ponemos hoy?'}
                       {activeTab === 'armario' && 'Tu colección'}
                       {activeTab === 'wishlist' && 'Lista de deseos'}
+                      {activeTab === 'sales' && 'En Venta / Vinted'}
                       {activeTab === 'favoritos' && 'Tus favoritos'}
                       {activeTab === 'calendario' && 'Tu semana'}
                       {activeTab === 'maleta' && 'Viajes y Maletas'}
@@ -278,6 +275,7 @@ function ArmarioContent() {
         <div className="no-scrollbar" style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px', overflowX:'auto' }}>
             <TabButton label="Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} />
             <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
+            <TabButton label="Vender" active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<Coins size={16} />} />
             <TabButton label="Deseos" active={activeTab === 'wishlist'} onClick={() => setActiveTab('wishlist')} icon={<Star size={16} />} />
             <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
             <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} />
@@ -293,9 +291,11 @@ function ArmarioContent() {
 }
 
 // --- VISTAS ---
-function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: PlannedDay[] }) {
+function StatsView({ clothes, sales, plannedDays }: { clothes: Prenda[], sales: Prenda[], plannedDays: PlannedDay[] }) {
     const cleanClothes = clothes.filter(c => !c.dirty);
     const totalValue = clothes.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    const salesValue = sales.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    
     const brandCounts = clothes.reduce((acc, curr) => { const b = curr.brand || 'Sin Marca'; acc[b] = (acc[b] || 0) + 1; return acc; }, {} as Record<string, number>);
     const topBrand = Object.entries(brandCounts).sort(([,a], [,b]) => b - a)[0];
     const colorCounts = clothes.reduce((acc, curr) => { const hex = curr.primaryColor?.hex || '#000000'; acc[hex] = (acc[hex] || 0) + 1; return acc; }, {} as Record<string, number>);
@@ -317,7 +317,7 @@ function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: P
 
     const bestAmortized = [...clothesWithCost].reverse().slice(0, 3).filter(c => c.price && c.price > 0);
     
-    if (clothes.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
+    if (clothes.length === 0 && sales.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
 
     return (
         <div className="fade-in">
@@ -331,18 +331,27 @@ function StatsView({ clothes, plannedDays }: { clothes: Prenda[], plannedDays: P
                     <div><div style={{fontSize:'0.7rem', opacity:0.7, textTransform:'uppercase'}}>Prendas</div><div style={{fontWeight:'700', fontSize:'1.1rem'}}>{clothes.length}</div></div>
                 </div>
             </div>
+            
+            {sales.length > 0 && (
+                <div style={{background:'#f0fff4', color:'#166534', padding:'15px', borderRadius:'16px', marginBottom:'20px', border:'1px solid #dcfce7', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                        <Coins size={20}/> <span style={{fontWeight:'700'}}>Potencial en Vinted</span>
+                    </div>
+                    <div style={{fontSize:'1.5rem', fontWeight:'900'}}>{salesValue}€</div>
+                </div>
+            )}
 
             {bestAmortized.length > 0 && (
                 <div style={{marginBottom:'20px'}}>
                       <h3 style={{fontSize:'1rem', fontWeight:'800', marginBottom:'10px'}}>🌟 ¡Bien Amortizados!</h3>
                       <div style={{display:'flex', gap:'10px', overflowX:'auto'}} className="no-scrollbar">
                         {bestAmortized.map(c => (
-                            <div key={c.id} style={{minWidth:'120px', background:'#f0fff4', padding:'10px', borderRadius:'12px', border:'1px solid #dcfce7'}}>
+                            <div key={c.id} style={{minWidth:'120px', background:'#f9f9f9', padding:'10px', borderRadius:'12px', border:'1px solid #eee'}}>
                                 <div style={{width:'40px', height:'40px', position:'relative', borderRadius:'8px', overflow:'hidden', marginBottom:'5px'}}>
                                     <Image src={c.image} fill style={{objectFit:'cover'}} alt={c.name} />
                                 </div>
                                 <div style={{fontWeight:'700', fontSize:'0.8rem'}}>{c.name}</div>
-                                <div style={{fontSize:'0.7rem', color:'#166534'}}>{c.costPerWear.toFixed(2)}€ / uso</div>
+                                <div style={{fontSize:'0.7rem', color:'#666'}}>{c.costPerWear.toFixed(2)}€ / uso</div>
                             </div>
                         ))}
                       </div>
@@ -374,7 +383,8 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
     const generateSmartOutfit = () => {
         setIsAnimating(true); setMessage('');
         
-        const cleanClothes = clothes.filter(c => !c.dirty && !c.isWishlist);
+        // FILTRO: No sucia, No wishlist, No en venta
+        const cleanClothes = clothes.filter(c => !c.dirty && !c.isWishlist && !c.forSale);
         
         let seasonFilter: Season[] = ['primavera', 'verano', 'otono', 'invierno'];
         let tempWarning = '';
@@ -724,6 +734,9 @@ function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], 
     const [shoes, setShoes] = useState<Prenda | null>(null);
     const [selectingFor, setSelectingFor] = useState<'top' | 'bottom' | 'body' | 'shoes' | null>(null);
 
+    // FILTRO MANUAL: No mostrar cosas en venta
+    const validClothes = clothes.filter(c => !c.forSale);
+
     const handleSelect = (p: Prenda) => {
         if (selectingFor === 'top') setTop(p);
         if (selectingFor === 'bottom') setBottom(p);
@@ -773,7 +786,7 @@ function ManualOutfitCreator({ clothes, onSave, onClose }: { clothes: Prenda[], 
                             <h4 style={{margin:0}}>Elige {selectingFor}</h4>
                         </div>
                         <div style={{flex:1, overflowY:'auto', padding:'15px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
-                            {clothes.filter(c => c.category === selectingFor).map(c => (
+                            {validClothes.filter(c => c.category === selectingFor).map(c => (
                                 <div key={c.id} onClick={() => handleSelect(c)} style={{cursor:'pointer', position:'relative'}}>
                                     <div style={{aspectRatio:'3/4', position:'relative', borderRadius:'10px', overflow:'hidden', border: c.isWishlist ? '2px solid #fbbf24' : '1px solid #eee'}}>
                                         <Image src={c.image} alt="img" fill style={{objectFit:'cover'}}/>
@@ -866,7 +879,8 @@ function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUse
     )
 }
 
-function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothes: Prenda[], loading: boolean, currentUser: string, isWishlistMode: boolean }) {
+// --- ARMARIO VIEW (ACTUALIZADO CON MODOS) ---
+function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Prenda[], loading: boolean, currentUser: string, viewMode: 'wardrobe' | 'wishlist' | 'sales' }) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [sortBy, setSortBy] = useState<'date' | 'color' | 'category'>('date'); 
@@ -902,7 +916,9 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
                 imageUrl = await getDownloadURL(storageRef);
             }
             dataToSave.image = imageUrl;
-            dataToSave.isWishlist = isWishlistMode; 
+            // Forzamos el modo correcto al crear
+            dataToSave.isWishlist = viewMode === 'wishlist';
+            dataToSave.forSale = viewMode === 'sales';
 
             if (id) {
                 const docRef = doc(db, 'clothes', id);
@@ -914,12 +930,27 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
         } catch (error) { console.error("ERROR REAL:", error); alert("Error al guardar: " + (error as any).message); }
     };
 
-    const handleDelete = async (id: string) => { if(confirm("¿Borrar?")) await deleteDoc(doc(db, 'clothes', id)); };
+    const handleDelete = async (id: string) => { if(confirm("¿Borrar definitivamente?")) await deleteDoc(doc(db, 'clothes', id)); };
     const toggleDirty = async (id: string, currentDirty: boolean) => { await updateDoc(doc(db, 'clothes', id), { dirty: !currentDirty }); };
     
+    // Mover de Wishlist -> Armario
     const moveToWardrobe = async (id: string) => {
         if(confirm("¿Ya tienes esta prenda? ¡Genial! La movemos a tu armario.")) {
-            await updateDoc(doc(db, 'clothes', id), { isWishlist: false, createdAt: serverTimestamp() });
+            await updateDoc(doc(db, 'clothes', id), { isWishlist: false, forSale: false, createdAt: serverTimestamp() });
+        }
+    }
+
+    // Mover de Armario -> Ventas
+    const sellItem = async (id: string) => {
+        if(confirm("¿Poner a la venta? Desaparecerá de tu armario y outfits.")) {
+            await updateDoc(doc(db, 'clothes', id), { forSale: true, isWishlist: false, dirty: false });
+        }
+    }
+
+    // Mover de Ventas -> Armario
+    const returnToWardrobe = async (id: string) => {
+        if(confirm("¿Recuperar al armario?")) {
+            await updateDoc(doc(db, 'clothes', id), { forSale: false });
         }
     }
 
@@ -934,13 +965,19 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
     const openEdit = (prenda: Prenda) => { setEditingPrenda(prenda); setIsModalOpen(true); };
     const openNew = () => { setEditingPrenda(null); setIsModalOpen(true); }
 
+    const getPlaceholder = () => {
+        if (viewMode === 'wishlist') return 'Tu lista de deseos está vacía.';
+        if (viewMode === 'sales') return 'No tienes nada a la venta.';
+        return '¡Sube ropa para empezar!';
+    }
+
     return (
         <div className="fade-in">
             <div style={{ marginBottom: '20px', display: 'flex', flexDirection:'column', gap:'10px' }}>
                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
                     <div style={{flex:1, position:'relative'}}>
                         <Search size={18} style={{position:'absolute', left:'12px', top:'12px', color:'#999'}}/>
-                        <input type="text" placeholder={isWishlistMode ? "Buscar en deseos..." : "Buscar en armario..."} value={search} onChange={e => setSearch(e.target.value)} style={{width:'100%', padding:'12px 12px 12px 40px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9', fontSize:'0.9rem'}} />
+                        <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} style={{width:'100%', padding:'12px 12px 12px 40px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9', fontSize:'0.9rem'}} />
                     </div>
                      <button onClick={() => openNew()} style={{ background: '#111', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', flexShrink:0 }}><Camera size={24} /></button>
                 </div>
@@ -955,7 +992,7 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
                         </select>
                     </div>
 
-                    {!isWishlistMode && dirtyCount > 0 && (
+                    {viewMode === 'wardrobe' && dirtyCount > 0 && (
                         <button onClick={cleanAll} style={{ background: '#E3F2FD', color: '#2196F3', border: 'none', padding:'0 15px', height: '35px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap:'5px', cursor: 'pointer', fontWeight:'700', fontSize:'0.8rem' }}>
                             <Droplets size={18} /> {dirtyCount}
                         </button>
@@ -968,18 +1005,35 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
                     {filteredClothes.map((prenda) => (
                         <div key={prenda.id} style={{ position: 'relative' }}>
                             <div style={{ aspectRatio: '3/4', background: '#f4f4f5', borderRadius: '20px', overflow: 'hidden', marginBottom: '8px', position: 'relative' }}>
-                                 {prenda.dirty && !isWishlistMode && (
+                                 {prenda.dirty && viewMode === 'wardrobe' && (
                                      <div style={{position:'absolute', top:0, left:0, right:0, bottom:0, background:'rgba(255,255,255,0.7)', zIndex:2, display:'flex', alignItems:'center', justifyContent:'center'}}>
                                          <div style={{background:'white', padding:'8px', borderRadius:'50%', boxShadow:'0 4px 10px rgba(0,0,0,0.1)'}}><Droplets size={24} color="#ccc"/></div>
                                      </div>
                                  )}
                                  <Image src={prenda.image} alt={prenda.name} fill style={{ objectFit: 'cover' }} />
+                                 
+                                 {/* BOTONES DE ACCION EN LA TARJETA */}
                                  <div style={{position:'absolute', top:'8px', right:'8px', zIndex:5, display:'flex', gap:'5px'}}>
-                                     {isWishlistMode && (
+                                     
+                                     {/* Modo Wishlist: Mover a Armario */}
+                                     {viewMode === 'wishlist' && (
                                          <button onClick={() => moveToWardrobe(prenda.id)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><ShoppingBag size={14} color="#4CAF50"/></button>
                                      )}
+
+                                     {/* Modo Armario: Vender */}
+                                     {viewMode === 'wardrobe' && (
+                                         <button onClick={() => sellItem(prenda.id)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Coins size={14} color="#F59E0B"/></button>
+                                     )}
+
+                                     {/* Modo Ventas: Recuperar */}
+                                     {viewMode === 'sales' && (
+                                         <button onClick={() => returnToWardrobe(prenda.id)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><RotateCcw size={14} color="#10B981"/></button>
+                                     )}
+
                                      <button onClick={() => openEdit(prenda)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Edit3 size={14} color="#333"/></button>
-                                     {!isWishlistMode && <button onClick={() => toggleDirty(prenda.id, prenda.dirty || false)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Droplets size={14} color={prenda.dirty ? '#2196F3' : '#ccc'}/></button>}
+                                     
+                                     {viewMode === 'wardrobe' && <button onClick={() => toggleDirty(prenda.id, prenda.dirty || false)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Droplets size={14} color={prenda.dirty ? '#2196F3' : '#ccc'}/></button>}
+                                     
                                      <button onClick={() => handleDelete(prenda.id)} style={{background:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.1)'}}><Trash2 size={14} color="#ff6b6b"/></button>
                                  </div>
                             </div>
@@ -999,15 +1053,15 @@ function ArmarioView({ clothes, loading, currentUser, isWishlistMode }: { clothe
                             </div>
                         </div>
                     ))}
-                    {clothes.length === 0 && <p style={{color:'#888', gridColumn:'1/-1', textAlign:'center', marginTop:'50px'}}>{isWishlistMode ? 'Tu lista de deseos está vacía.' : '¡Sube ropa para empezar!'}</p>}
+                    {clothes.length === 0 && <p style={{color:'#888', gridColumn:'1/-1', textAlign:'center', marginTop:'50px'}}>{getPlaceholder()}</p>}
                 </div>
             )}
-            {isModalOpen && <UploadModal initialData={editingPrenda} onClose={() => setIsModalOpen(false)} onSave={handleSavePrenda} isWishlistDefault={isWishlistMode} />}
+            {isModalOpen && <UploadModal initialData={editingPrenda} onClose={() => setIsModalOpen(false)} onSave={handleSavePrenda} isWishlistDefault={viewMode === 'wishlist'} />}
         </div>
     );
 }
 
-// --- MODAL ACTUALIZADO ---
+// --- MODAL ---
 function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { initialData?: Prenda | null, onClose: any, onSave: any, isWishlistDefault?: boolean }) {
     const [mode, setMode] = useState<'upload' | 'url'>('upload'); 
     const [file, setFile] = useState<File | null>(null);
@@ -1018,7 +1072,6 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
     const [name, setName] = useState(initialData?.name || '');
     const [brand, setBrand] = useState(initialData?.brand || '');
     const [price, setPrice] = useState(initialData?.price?.toString() || '');
-    // ACTUALIZADO: type para accessories
     const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'body' | 'accessories'>(initialData?.category || 'top');
     const [subCategory, setSubCategory] = useState(initialData?.subCategory || '');
     
@@ -1135,8 +1188,9 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
             estilos: selectedStyles, 
             seasons: selectedSeasons,
             primaryColor, secondaryColors,
-            image: preview, // Si es URL directa, usamos esto
-            isWishlist: initialData ? initialData.isWishlist : isWishlistDefault 
+            image: preview, 
+            isWishlist: initialData ? initialData.isWishlist : isWishlistDefault,
+            forSale: initialData ? initialData.forSale : false
         };
 
         await onSave(finalData, file); 
@@ -1176,8 +1230,6 @@ function UploadModal({ initialData, onClose, onSave, isWishlistDefault }: { init
                 )}
 
                 <SectionLabel icon={<Layers size={14}/>} label="TIPO" />
-                
-                {/* BOTONES DE CATEGORÍA ACTUALIZADOS CON ACCESORIOS */}
                 <div style={{display:'flex', gap:'5px', marginBottom:'15px', flexWrap:'wrap'}}>
                     <CategoryBtn label="Arriba" active={category==='top'} onClick={()=>{setCategory('top'); setSubCategory('')}} />
                     <CategoryBtn label="Abajo" active={category==='bottom'} onClick={()=>{setCategory('bottom'); setSubCategory('')}} />
