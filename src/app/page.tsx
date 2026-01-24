@@ -256,7 +256,7 @@ function ArmarioContent() {
         <header style={{ marginBottom: '20px', paddingTop: '20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
-                    Hola, {currentUser} <span style={{fontSize:'2rem'}}>✨</span>
+                    Hola, {currentUser} <span style={{fontSize:'2rem'}}>💖</span>
                 </h1>
                 <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
                       {activeTab === 'outfit' && '¿Qué nos ponemos hoy?'}
