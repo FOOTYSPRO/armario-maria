@@ -178,9 +178,9 @@ function ArmarioContent() {
 
   // --- TEMAS DE USUARIO ---
   const USER_THEMES: Record<string, { bg: string, text: string }> = {
-      'Maria': { bg: '#fff0f3', text: '#111111' }, // Rosa clarito sutil
+      'Maria': { bg: '#cf62ab', text: '#111111' }, // Rosa clarito sutil
       'Jorge': { bg: '#00954C', text: '#ffffff' }, // Verde Betis potente (texto blanco para contraste)
-      'Marta': { bg: '#ffffff', text: '#111111' }, // Default
+      'Marta': { bg: '#5ab4a1', text: '#111111' }, // Default
   };
 
   const currentTheme = USER_THEMES[currentUser] || USER_THEMES['Marta'];
