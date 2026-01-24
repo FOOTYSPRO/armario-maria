@@ -178,7 +178,7 @@ function ArmarioContent() {
 
   // --- TEMAS DE USUARIO ---
   const USER_THEMES: Record<string, { bg: string, text: string }> = {
-      'Maria': { bg: '#cf62ab', text: '#111111' }, // Rosa clarito sutil
+      'Maria': { bg: '#cf9fbf', text: '#000000' }, // Rosa clarito sutil
       'Jorge': { bg: '#00954C', text: '#ffffff' }, // Verde Betis potente (texto blanco para contraste)
       'Marta': { bg: '#5ab4a1', text: '#111111' }, // Default
   };
@@ -190,7 +190,7 @@ function ArmarioContent() {
     const unsubscribeClothes = onSnapshot(q, (snapshot) => {
         const allData = snapshot.docs.map(doc => {
             const d = doc.data();
-            const primaryColor = d.primaryColor || { name: d.colorName || 'black', hex: d.colorHex || '#000000' };
+            const primaryColor = d.primaryColor || { name: d.colorName || 'black', hex: d.colorHex || '#cc0573' };
             const estilos = d.estilos || (d.estilo ? [d.estilo] : ['casual']);
             const seasons = d.seasons || ['primavera', 'verano', 'otono', 'invierno'];
             
