@@ -76,8 +76,8 @@ interface Outfit {
     top?: Prenda | null;
     bottom?: Prenda | null;
     body?: Prenda | null;
-    outerwear?: Prenda | null; // NUEVO: Abrigo/Chaqueta
-    accessories?: Prenda[];    // NUEVO: Array de accesorios
+    outerwear?: Prenda | null;
+    accessories?: Prenda[];
     shoes: Prenda | null;
     matchScore?: number;
     date?: any;
@@ -176,6 +176,15 @@ function ArmarioContent() {
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<{temp: number, city: string, code: number} | null>(null);
 
+  // --- TEMAS DE USUARIO ---
+  const USER_THEMES: Record<string, { bg: string, text: string }> = {
+      'Maria': { bg: '#fff0f3', text: '#111111' }, // Rosa clarito sutil
+      'Jorge': { bg: '#00954C', text: '#ffffff' }, // Verde Betis potente (texto blanco para contraste)
+      'Marta': { bg: '#ffffff', text: '#111111' }, // Default
+  };
+
+  const currentTheme = USER_THEMES[currentUser] || USER_THEMES['Marta'];
+
   useEffect(() => {
     const q = query(collection(db, 'clothes'), orderBy('createdAt', 'desc'));
     const unsubscribeClothes = onSnapshot(q, (snapshot) => {
@@ -240,13 +249,14 @@ function ArmarioContent() {
   };
   
   return (
-    <div style={{ fontFamily: 'var(--font-inter), sans-serif', background: '#ffffff', minHeight: '100vh', color: '#111111' }}>
+    // APLICAMOS EL TEMA DINÁMICO AQUÍ
+    <div style={{ fontFamily: 'var(--font-inter), sans-serif', background: currentTheme.bg, minHeight: '100vh', color: currentTheme.text, transition: 'background 0.3s, color 0.3s' }}>
       <style dangerouslySetInnerHTML={{__html: `
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800;900&display=swap');
             .fade-in { animation: fadeIn 0.4s ease-out; }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
             .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-            .modal-content { background: white; padding: 25px; borderRadius: 24px; width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+            .modal-content { background: white; padding: 25px; borderRadius: 24px; width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2); color: #111; } /* Forzamos color negro en modales */
             .no-scrollbar::-webkit-scrollbar { display: none; }
             input[type="color"] { -webkit-appearance: none; border: none; width: 100%; height: 100%; padding: 0; overflow: hidden; opacity: 0; position: absolute; top:0; left:0; cursor: pointer; }
         `}} />
@@ -256,9 +266,9 @@ function ArmarioContent() {
         <header style={{ marginBottom: '20px', paddingTop: '20px', display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
                 <h1 style={{ fontSize: '2.5rem', fontWeight: '900', letterSpacing: '-1.5px', margin: '0 0 5px 0', lineHeight: '1' }}>
-                    Hola, {currentUser} <span style={{fontSize:'2rem'}}>💖</span>
+                    Hola, {currentUser} <span style={{fontSize:'2rem'}}>✨</span>
                 </h1>
-                <p style={{ color: '#666', fontSize: '1rem', fontWeight: '500' }}>
+                <p style={{ opacity: 0.8, fontSize: '1rem', fontWeight: '500' }}>
                       {activeTab === 'outfit' && '¿Qué nos ponemos hoy?'}
                       {activeTab === 'armario' && 'Tu colección'}
                       {activeTab === 'wishlist' && 'Lista de deseos'}
@@ -270,22 +280,22 @@ function ArmarioContent() {
                 </p>
             </div>
             
-            <div style={{position:'relative', display:'flex', gap:'5px', background:'#f0f0f0', padding:'4px', borderRadius:'20px'}}>
+            <div style={{position:'relative', display:'flex', gap:'5px', background: currentUser === 'Jorge' ? 'rgba(255,255,255,0.2)' : '#f0f0f0', padding:'4px', borderRadius:'20px'}}>
                 {USERS.map(u => (
-                    <button key={u} onClick={() => setCurrentUser(u)} style={{padding:'8px 12px', borderRadius:'16px', border:'none', background: currentUser === u ? '#111' : 'transparent', color: currentUser === u ? 'white' : '#888', fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.2s'}}>{u}</button>
+                    <button key={u} onClick={() => setCurrentUser(u)} style={{padding:'8px 12px', borderRadius:'16px', border:'none', background: currentUser === u ? (currentUser === 'Jorge' ? 'white' : '#111') : 'transparent', color: currentUser === u ? (currentUser === 'Jorge' ? '#00954C' : 'white') : (currentUser === 'Jorge' ? 'white' : '#888'), fontWeight:'700', fontSize:'0.8rem', cursor:'pointer', transition:'all 0.2s'}}>{u}</button>
                 ))}
             </div>
         </header>
 
-        <div className="no-scrollbar" style={{ display: 'flex', background: '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px', overflowX:'auto' }}>
-            <TabButton label="Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} />
-            <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} />
-            <TabButton label="Vender" active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<Coins size={16} />} />
-            <TabButton label="Deseos" active={activeTab === 'wishlist'} onClick={() => setActiveTab('wishlist')} icon={<Star size={16} />} />
-            <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} />
-            <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} />
-            <TabButton label="Maleta" active={activeTab === 'maleta'} onClick={() => setActiveTab('maleta')} icon={<Briefcase size={16} />} />
-            <TabButton label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon={<PieChart size={16} />} />
+        <div className="no-scrollbar" style={{ display: 'flex', background: currentUser === 'Jorge' ? 'rgba(255,255,255,0.1)' : '#f4f4f5', padding: '5px', borderRadius: '16px', marginBottom: '30px', overflowX:'auto' }}>
+            <TabButton label="Outfit" active={activeTab === 'outfit'} onClick={() => setActiveTab('outfit')} icon={<Sparkles size={16} />} currentUser={currentUser} />
+            <TabButton label="Armario" active={activeTab === 'armario'} onClick={() => setActiveTab('armario')} icon={<Shirt size={16} />} currentUser={currentUser} />
+            <TabButton label="Vender" active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<Coins size={16} />} currentUser={currentUser} />
+            <TabButton label="Deseos" active={activeTab === 'wishlist'} onClick={() => setActiveTab('wishlist')} icon={<Star size={16} />} currentUser={currentUser} />
+            <TabButton label="Favs" active={activeTab === 'favoritos'} onClick={() => setActiveTab('favoritos')} icon={<Heart size={16} />} currentUser={currentUser} />
+            <TabButton label="Agenda" active={activeTab === 'calendario'} onClick={() => setActiveTab('calendario')} icon={<CalendarIcon size={16} />} currentUser={currentUser} />
+            <TabButton label="Maleta" active={activeTab === 'maleta'} onClick={() => setActiveTab('maleta')} icon={<Briefcase size={16} />} currentUser={currentUser} />
+            <TabButton label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon={<PieChart size={16} />} currentUser={currentUser} />
         </div>
 
         {renderView()}
@@ -322,7 +332,7 @@ function StatsView({ clothes, sales, plannedDays }: { clothes: Prenda[], sales: 
 
     const bestAmortized = [...clothesWithCost].reverse().slice(0, 3).filter(c => c.price && c.price > 0);
     
-    if (clothes.length === 0 && sales.length === 0) return <div style={{textAlign:'center', padding:'40px', color:'#888'}}>Sube ropa para ver tus estadísticas.</div>;
+    if (clothes.length === 0 && sales.length === 0) return <div style={{textAlign:'center', padding:'40px', opacity:0.6}}>Sube ropa para ver tus estadísticas.</div>;
 
     return (
         <div className="fade-in">
@@ -351,7 +361,7 @@ function StatsView({ clothes, sales, plannedDays }: { clothes: Prenda[], sales: 
                       <h3 style={{fontSize:'1rem', fontWeight:'800', marginBottom:'10px'}}>🌟 ¡Bien Amortizados!</h3>
                       <div style={{display:'flex', gap:'10px', overflowX:'auto'}} className="no-scrollbar">
                         {bestAmortized.map(c => (
-                            <div key={c.id} style={{minWidth:'120px', background:'#f9f9f9', padding:'10px', borderRadius:'12px', border:'1px solid #eee'}}>
+                            <div key={c.id} style={{minWidth:'120px', background:'#f9f9f9', padding:'10px', borderRadius:'12px', border:'1px solid #eee', color:'#111'}}>
                                 <div style={{width:'40px', height:'40px', position:'relative', borderRadius:'8px', overflow:'hidden', marginBottom:'5px'}}>
                                     <Image src={c.image} fill style={{objectFit:'cover'}} alt={c.name} />
                                 </div>
@@ -481,7 +491,7 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
             </div>
             
             <div style={{marginBottom:'20px'}}>
-                <div style={{fontSize:'0.8rem', fontWeight:'700', color:'#666', marginBottom:'10px', textAlign:'center', textTransform:'uppercase', letterSpacing:'1px'}}>¿Qué te apetece hoy?</div>
+                <div style={{fontSize:'0.8rem', fontWeight:'700', opacity:0.6, marginBottom:'10px', textAlign:'center', textTransform:'uppercase', letterSpacing:'1px'}}>¿Qué te apetece hoy?</div>
                 <div style={{display:'flex', justifyContent:'center', gap:'8px', flexWrap:'wrap'}}>
                     <button onClick={() => setFilterStyle('all')} style={{padding:'8px 16px', borderRadius:'20px', border: filterStyle === 'all' ? '2px solid #111' : '1px solid #eee', background: filterStyle === 'all' ? '#111' : 'white', color: filterStyle === 'all' ? 'white' : '#666', fontWeight:'600', fontSize:'0.85rem', cursor:'pointer'}}>🎲 Sorpréndeme</button>
                     {STYLES.map(s => (
@@ -493,13 +503,13 @@ function OutfitView({ clothes, weather, currentUser }: { clothes: Prenda[], weat
             {outfit && (
                 <div className="fade-in" style={{ marginBottom: '30px', position:'relative' }}>
                     <button onClick={saveToFavorites} disabled={isSaving} style={{position:'absolute', top:'-10px', right:'-5px', zIndex:10, background:'white', border:'none', borderRadius:'50%', width:'50px', height:'50px', boxShadow:'0 5px 15px rgba(0,0,0,0.1)', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color: isSaving ? '#ccc' : '#e0245e', transition:'transform 0.2s'}}><Heart size={24} fill={isSaving ? "none" : "#e0245e"} /></button>
-                    <div style={{ textAlign:'center', marginBottom:'15px', color:'#666', fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
+                    <div style={{ textAlign:'center', marginBottom:'15px', opacity:0.7, fontSize:'0.9rem', fontWeight:'600' }}>{message}</div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', gridTemplateRows: 'auto auto' }}>
                         
                         {/* ABRIGO (Si hay) */}
                         {outfit.outerwear && (
-                            <div style={{ gridColumn: '1 / -1', background: '#eef', borderRadius: '16px', padding: '10px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom:'5px' }}>
+                            <div style={{ gridColumn: '1 / -1', background: '#eef', borderRadius: '16px', padding: '10px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom:'5px', color:'#111' }}>
                                 <div style={{width:'50px', height:'50px', position:'relative', borderRadius:'8px', overflow:'hidden', background:'white'}}>
                                     <Image src={outfit.outerwear.image} alt="coat" fill style={{objectFit:'contain'}}/>
                                 </div>
@@ -584,7 +594,7 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
         return (
             <div className="fade-in">
                 <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px'}}>
-                    <button onClick={() => setSelectedTrip(null)} style={{background:'#f0f0f0', border:'none', borderRadius:'50%', width:'35px', height:'35px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}><ChevronLeft/></button>
+                    <button onClick={() => setSelectedTrip(null)} style={{background:'#f0f0f0', border:'none', borderRadius:'50%', width:'35px', height:'35px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'#111'}}><ChevronLeft/></button>
                     <h2 style={{fontSize:'1.5rem', fontWeight:'800', margin:0}}>{selectedTrip.name}</h2>
                 </div>
                 <div style={{background:'#111', color:'white', padding:'20px', borderRadius:'16px', marginBottom:'20px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -617,7 +627,7 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
     return (
         <div className="fade-in">
             {isCreating ? (
-                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'16px', marginBottom:'20px'}}>
+                <div style={{background:'#f9f9f9', padding:'20px', borderRadius:'16px', marginBottom:'20px', color:'#111'}}>
                     <h3 style={{marginTop:0}}>Nueva Maleta</h3>
                     <input type="text" placeholder="Ej: Fin de semana rural" value={newTripName} onChange={e => setNewTripName(e.target.value)} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #ddd', marginBottom:'10px'}} />
                     <div style={{display:'flex', gap:'10px'}}>
@@ -626,11 +636,11 @@ function TripView({ clothes, currentUser }: { clothes: Prenda[], currentUser: st
                     </div>
                 </div>
             ) : (
-                <button onClick={() => setIsCreating(true)} style={{width:'100%', padding:'15px', background:'#f9f9f9', border:'2px dashed #ddd', borderRadius:'16px', color:'#666', fontWeight:'600', marginBottom:'20px', cursor:'pointer'}}>+ Crear nuevo viaje</button>
+                <button onClick={() => setIsCreating(true)} style={{width:'100%', padding:'15px', background:'rgba(255,255,255,0.5)', border:'2px dashed #ddd', borderRadius:'16px', color: currentUser==='Jorge'?'white':'#666', fontWeight:'600', marginBottom:'20px', cursor:'pointer'}}>+ Crear nuevo viaje</button>
             )}
             <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
                 {trips.map(trip => (
-                    <div key={trip.id} onClick={() => setSelectedTrip(trip)} style={{background:'white', border:'1px solid #eee', borderRadius:'16px', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.02)'}}>
+                    <div key={trip.id} onClick={() => setSelectedTrip(trip)} style={{background:'white', border:'1px solid #eee', borderRadius:'16px', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', boxShadow:'0 2px 5px rgba(0,0,0,0.02)', color:'#111'}}>
                         <div style={{display:'flex', alignItems:'center', gap:'15px'}}>
                             <div style={{background:'#eef', padding:'10px', borderRadius:'12px'}}><Briefcase size={20} color="#333"/></div>
                             <div><div style={{fontWeight:'700', fontSize:'1rem'}}>{trip.name}</div><div style={{fontSize:'0.8rem', color:'#888'}}>{trip.items?.length || 0} prendas</div></div>
@@ -689,9 +699,9 @@ function CalendarView({currentUser, plannedDays}: {currentUser: string, plannedD
     return (
         <div className="fade-in">
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-                <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronLeft size={24}/></button>
+                <button onClick={() => changeWeek(-1)} style={{background:'none', border:'none', cursor:'pointer', color:'inherit'}}><ChevronLeft size={24}/></button>
                 <h3 style={{fontSize:'1.1rem', fontWeight:'700', textTransform:'capitalize'}}>{weekStart.toLocaleString('es-ES', { month: 'long' })} {weekStart.getFullYear()}</h3>
-                <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer'}}><ChevronRight size={24}/></button>
+                <button onClick={() => changeWeek(1)} style={{background:'none', border:'none', cursor:'pointer', color:'inherit'}}><ChevronRight size={24}/></button>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:'15px'}}>
                 {days.map((day) => {
@@ -700,7 +710,7 @@ function CalendarView({currentUser, plannedDays}: {currentUser: string, plannedD
                     const isToday = formatDateKey(new Date()) === dateKey;
                     
                     return (
-                        <div key={dateKey} style={{background: isToday ? '#fff' : '#f9f9f9', border: isToday ? '2px solid #111' : '1px solid #eee', borderRadius:'16px', padding:'15px'}}>
+                        <div key={dateKey} style={{background: isToday ? 'white' : 'rgba(255,255,255,0.8)', border: isToday ? `2px solid ${currentUser==='Jorge'?'#00954C':'#111'}` : '1px solid #eee', borderRadius:'16px', padding:'15px', color:'#111'}}>
                             <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
                                 <div style={{display:'flex', flexDirection:'column'}}>
                                     <span style={{fontSize:'0.8rem', color:'#666', textTransform:'uppercase', fontWeight:'600'}}>{day.toLocaleString('es-ES', { weekday: 'long' })}</span>
@@ -709,11 +719,16 @@ function CalendarView({currentUser, plannedDays}: {currentUser: string, plannedD
                                 {plan ? (
                                     <button onClick={() => deletePlan(plan.id)} style={{background:'#ffebee', color:'red', border:'none', borderRadius:'50%', width:'30px', height:'30px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14}/></button>
                                 ) : (
-                                    <button onClick={() => handleAddClick(dateKey)} style={{background:'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}><Plus size={14}/> Añadir</button>
+                                    <button onClick={() => handleAddClick(dateKey)} style={{background:currentUser==='Jorge'?'#00954C':'#111', color:'white', border:'none', borderRadius:'20px', padding:'5px 15px', fontSize:'0.8rem', fontWeight:'600', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}><Plus size={14}/> Añadir</button>
                                 )}
                             </div>
                             {plan && plan.outfit ? (
                                 <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', opacity:0.9}}>
+                                     {plan.outfit.outerwear && (
+                                        <div style={{gridColumn:'1/-1', display:'flex', gap:'5px', alignItems:'center', fontSize:'0.7rem', background:'#eee', padding:'3px 6px', borderRadius:'6px', width:'fit-content', marginBottom:'2px'}}>
+                                            <Layers size={10}/> {plan.outfit.outerwear.name}
+                                        </div>
+                                     )}
                                     {plan.outfit.type === '1-piece' || (!plan.outfit.top && plan.outfit.body) ? (
                                         <div style={{aspectRatio:'2/1', background:'white', borderRadius:'8px', overflow:'hidden', position:'relative', gridColumn: 'span 2'}}>
                                             {plan.outfit.body?.image ? <Image src={plan.outfit.body.image} alt="body" fill style={{objectFit:'contain', padding:'2px'}}/> : null}
@@ -967,16 +982,16 @@ function FavoritesView({ clothes, currentUser }: { clothes: Prenda[], currentUse
 
     return (
         <div className="fade-in">
-            <button onClick={() => setIsManualOpen(true)} style={{width:'100%', padding:'15px', background:'#f0f0f0', border:'2px dashed #ccc', borderRadius:'15px', marginBottom:'20px', fontWeight:'700', color:'#444', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', cursor:'pointer'}}>
+            <button onClick={() => setIsManualOpen(true)} style={{width:'100%', padding:'15px', background:'rgba(255,255,255,0.5)', border:'2px dashed #ccc', borderRadius:'15px', marginBottom:'20px', fontWeight:'700', color:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', cursor:'pointer'}}>
                 <Plus size={20}/> Crear mi propio Outfit
             </button>
 
             {favorites.length === 0 ? (
-                 <div style={{textAlign:'center', padding:'40px 20px', color:'#999'}}><Heart size={40} style={{marginBottom:'10px', opacity:0.3}} /><p>Todavía no has guardado ningún look.</p></div>
+                 <div style={{textAlign:'center', padding:'40px 20px', opacity:0.6}}><Heart size={40} style={{marginBottom:'10px', opacity:0.3}} /><p>Todavía no has guardado ningún look.</p></div>
             ) : (
                 <div style={{display:'grid', gap:'20px'}}>
                     {favorites.map(fav => (
-                        <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative'}}>
+                        <div key={fav.id} style={{background:'white', borderRadius:'20px', padding:'15px', boxShadow:'0 4px 15px rgba(0,0,0,0.05)', border:'1px solid #f0f0f0', position:'relative', color:'#111'}}>
                             <button onClick={() => deleteFav(fav.id!)} style={{position:'absolute', top:'10px', right:'10px', zIndex:5, background:'white', border:'1px solid #eee', borderRadius:'50%', width:'28px', height:'28px', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}><Trash2 size={14} color="#999"/></button>
                             
                             {/* Mostrar Abrigo si tiene */}
@@ -1116,7 +1131,7 @@ function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Pre
         <div className="fade-in">
             <div style={{ marginBottom: '20px', display: 'flex', flexDirection:'column', gap:'10px' }}>
                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                    <div style={{flex:1, position:'relative'}}>
+                    <div style={{flex:1, position:'relative', color:'#111'}}>
                         <Search size={18} style={{position:'absolute', left:'12px', top:'12px', color:'#999'}}/>
                         <input type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} style={{width:'100%', padding:'12px 12px 12px 40px', borderRadius:'12px', border:'1px solid #eee', background:'#f9f9f9', fontSize:'0.9rem'}} />
                     </div>
@@ -1124,9 +1139,9 @@ function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Pre
                 </div>
                 
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <div style={{display:'flex', alignItems:'center', gap:'5px', background:'#f5f5f5', padding:'5px 10px', borderRadius:'10px'}}>
-                        <ArrowUpDown size={14} color="#666"/>
-                        <select value={sortBy} onChange={(e:any) => setSortBy(e.target.value)} style={{background:'transparent', border:'none', fontSize:'0.85rem', fontWeight:'600', color:'#444'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'5px', background: currentUser==='Jorge'?'rgba(255,255,255,0.2)':'#f5f5f5', padding:'5px 10px', borderRadius:'10px'}}>
+                        <ArrowUpDown size={14} color={currentUser==='Jorge'?'white':'#666'}/>
+                        <select value={sortBy} onChange={(e:any) => setSortBy(e.target.value)} style={{background:'transparent', border:'none', fontSize:'0.85rem', fontWeight:'600', color:currentUser==='Jorge'?'white':'#444'}}>
                             <option value="date">Más recientes</option>
                             <option value="color">Por Color</option>
                             <option value="category">Por Tipo</option>
@@ -1144,7 +1159,7 @@ function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Pre
             {loading ? <p>Cargando...</p> : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
                     {filteredClothes.map((prenda) => (
-                        <div key={prenda.id} style={{ position: 'relative' }}>
+                        <div key={prenda.id} style={{ position: 'relative', color:'#111' }}>
                             <div style={{ aspectRatio: '3/4', background: '#f4f4f5', borderRadius: '20px', overflow: 'hidden', marginBottom: '8px', position: 'relative' }}>
                                  {prenda.dirty && viewMode === 'wardrobe' && (
                                      <div style={{position:'absolute', top:0, left:0, right:0, bottom:0, background:'rgba(255,255,255,0.7)', zIndex:2, display:'flex', alignItems:'center', justifyContent:'center'}}>
@@ -1179,7 +1194,7 @@ function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Pre
                                  </div>
                             </div>
                             <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                                <h3 style={{ fontSize: '0.9rem', fontWeight: '700', margin: '0 0 5px 0', color: prenda.dirty ? '#ccc' : '#111' }}>{prenda.name}</h3>
+                                <h3 style={{ fontSize: '0.9rem', fontWeight: '700', margin: '0 0 5px 0', color: prenda.dirty ? '#ccc' : (currentUser==='Jorge'?'white':'#111') }}>{prenda.name}</h3>
                                 {prenda.price ? <span style={{fontSize:'0.75rem', fontWeight:'600', color:'#4CAF50'}}>{prenda.price}€</span> : null}
                             </div>
                             <div style={{display:'flex', gap:'5px', flexWrap:'wrap', opacity: prenda.dirty ? 0.5 : 1}}>
@@ -1194,7 +1209,7 @@ function ArmarioView({ clothes, loading, currentUser, viewMode }: { clothes: Pre
                             </div>
                         </div>
                     ))}
-                    {clothes.length === 0 && <p style={{color:'#888', gridColumn:'1/-1', textAlign:'center', marginTop:'50px'}}>{getPlaceholder()}</p>}
+                    {clothes.length === 0 && <p style={{color:'inherit', opacity:0.6, gridColumn:'1/-1', textAlign:'center', marginTop:'50px'}}>{getPlaceholder()}</p>}
                 </div>
             )}
             {isModalOpen && <UploadModal initialData={editingPrenda} onClose={() => setIsModalOpen(false)} onSave={handleSavePrenda} isWishlistDefault={viewMode === 'wishlist'} />}
@@ -1447,4 +1462,4 @@ function Badge({text, color='#eef', textColor='#444'}:any) { return <span style=
 function SectionLabel({icon, label}:any) { return <div style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'0.75rem', fontWeight:'700', color:'#888', marginBottom:'8px', letterSpacing:'0.5px'}}>{icon} {label}</div> }
 function CategoryBtn({label, active, onClick}:any) { return <button onClick={onClick} style={{flex:1, padding:'10px 5px', border: active?'2px solid #111':'1px solid #eee', background: active?'white':'#f9f9f9', borderRadius:'8px', fontSize:'0.9rem', fontWeight:'600', cursor:'pointer', minWidth:'70px'}}>{label}</button> }
 function Chip({label, active, onClick}:any) { return <button onClick={onClick} style={{padding:'6px 14px', border: active?'2px solid #111':'1px solid #ddd', background: active?'#111':'white', color: active?'white':'#666', borderRadius:'20px', fontSize:'0.85rem', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap'}}>{label}</button> }
-function TabButton({ label, active, onClick, icon }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? '#111' : '#888', fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', minWidth: '70px' }}>{icon} {label}</button>; }
+function TabButton({ label, active, onClick, icon, currentUser }: any) { return <button onClick={onClick} style={{ flex: 1, padding: '12px', background: 'transparent', border:'none', color: active ? (currentUser==='Jorge'?'white':'#111') : (currentUser==='Jorge'?'rgba(255,255,255,0.6)':'#888'), fontWeight: active ? '800' : '600', display: 'flex', justifyContent: 'center', gap: '8px', cursor:'pointer', transition:'all 0.2s', transform: active ? 'scale(1.05)' : 'scale(1)', minWidth: '70px' }}>{icon} {label}</button>; }
